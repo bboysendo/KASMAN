@@ -1,0 +1,9 @@
+pragma silverscript ^0.1.0;
+
+// Receives NFT mint payments (50 KAS each) and the 5% resale royalty.
+// Only the owner key can move the funds, whenever and wherever it wants.
+contract Treasury(pubkey owner) {
+    entry withdraw(sig ownerSig) {
+        require(checkSig(ownerSig, owner));
+    }
+}

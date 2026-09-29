@@ -1,0 +1,120 @@
+pragma silverscript ^0.1.0;
+
+// Kasman NFT collection. Every NFT and the collection root share one covenant ID, so
+// only outputs this contract authorizes can ever carry it: an NFT cannot be forged.
+//
+// mode ROOT   (one UTXO): mints the next tokenId to anyone who pays `mintPrice` to the
+//                         treasury, up to `maxSupply`.
+// mode FREE:   transfer, lock, list.
+// mode LOCKED: staked. KasmanRewards reads a staked NFT's tokenId (rarity) for the daily
+//              check-in multiplier and the claim wait; `stakeUse` lets it take part at
+//              most once per day (its age resets). `unlock` any time.
+// mode LISTED: anyone buys it for `price`: 95% to the seller, 5% royalty to the treasury.
+contract KasmanNFT(
+    byte[32] treasuryHash,
+    int mintPrice,
+    int maxSupply,
+    int daaPerDay,
+    int initTokenId,
+    byte[32] initOwner,
+    int initMode,
+    int initPrice
+) {
+    int constant ROOT = 0;
+    int constant FREE = 1;
+    int constant LOCKED = 2;
+    int constant LISTED = 3;
+    int constant ROYALTY_PERCENT = 5;
+
+    int tokenId = initTokenId;          // ROOT: next id to mint
+    byte[32] owner = initOwner;         // x-only pubkey
+    int mode = initMode;
+    int price = initPrice;              // LISTED: sale price in sompi
+
+    // The owner approves by spending one of their own wallet UTXOs (P2PK) in the same
+    // transaction: their wallet signs that input with SIGHASH_ALL, which covers every input
+    // and output. Wallets such as KasWare sign only their own inputs, never a covenant's.
+    function ownerSigned(int ownerInput) {
+        require(tx.inputs[ownerInput].scriptPubKey == byte[](new ScriptPubKeyP2PK(pubkey(owner))));
+    }
+
+    // Exactly one output continues this NFT, with `next` as its state.
+    function continueAs(State next) {
+        require(OpAuthOutputCount(this.activeInputIndex) == 1);
+        validateOutputState(OpAuthOutputIdx(this.activeInputIndex, 0), next);
+    }
+
+    // Payments are checked by output index, so a transaction may carry only one NFT input:
+    // otherwise two purchases could point at the same payment output.
+    function onlyNftInput() {
+        require(OpCovInputCount(OpInputCovenantId(this.activeInputIndex)) == 1);
+    }
+
+    function paysAtLeast(int outputIndex, byte[] spk, int amount) {
+        require(tx.outputs[outputIndex].scriptPubKey == spk);
+        require(tx.outputs[outputIndex].value >= amount);
+    }
+
+    entry mint(byte[32] buyer, int paymentIndex) {
+        require(mode == ROOT);
+        require(tokenId <= maxSupply);
+        onlyNftInput();
+        paysAtLeast(paymentIndex, byte[](new ScriptPubKeyP2SH(treasuryHash)), mintPrice);
+        require(OpAuthOutputCount(this.activeInputIndex) == 2);
+        validateOutputState(OpAuthOutputIdx(this.activeInputIndex, 0), State {
+            tokenId: tokenId + 1, owner: owner, mode: ROOT, price: 0
+        });
+        validateOutputState(OpAuthOutputIdx(this.activeInputIndex, 1), State {
+            tokenId: tokenId, owner: buyer, mode: FREE, price: 0
+        });
+    }
+
+    entry transfer(int ownerInput, byte[32] newOwner) {
+        require(mode == FREE);
+        ownerSigned(ownerInput);
+        continueAs(State { tokenId: tokenId, owner: newOwner, mode: FREE, price: 0 });
+    }
+
+    entry lock(int ownerInput) {
+        require(mode == FREE);
+        ownerSigned(ownerInput);
+        continueAs(State { tokenId: tokenId, owner: owner, mode: LOCKED, price: 0 });
+    }
+
+
+    // Unchanged, once per day: lets KasmanRewards count this staked NFT in a check-in or claim.
+    entry stakeUse(int ownerInput) {
+        require(mode == LOCKED);
+        ownerSigned(ownerInput);
+        require(this.ageDaa >= daaPerDay);
+        continueAs(State { tokenId: tokenId, owner: owner, mode: LOCKED, price: 0 });
+    }
+
+    entry unlock(int ownerInput) {
+        require(mode == LOCKED);
+        ownerSigned(ownerInput);
+        continueAs(State { tokenId: tokenId, owner: owner, mode: FREE, price: 0 });
+    }
+
+    entry list(int ownerInput, int salePrice) {
+        require(mode == FREE);
+        require(salePrice > 0);
+        ownerSigned(ownerInput);
+        continueAs(State { tokenId: tokenId, owner: owner, mode: LISTED, price: salePrice });
+    }
+
+    entry cancel(int ownerInput) {
+        require(mode == LISTED);
+        ownerSigned(ownerInput);
+        continueAs(State { tokenId: tokenId, owner: owner, mode: FREE, price: 0 });
+    }
+
+    entry buy(byte[32] buyer, int sellerIndex, int royaltyIndex) {
+        require(mode == LISTED);
+        onlyNftInput();
+        int royalty = price * ROYALTY_PERCENT / 100;
+        paysAtLeast(sellerIndex, byte[](new ScriptPubKeyP2PK(pubkey(owner))), price - royalty);
+        paysAtLeast(royaltyIndex, byte[](new ScriptPubKeyP2SH(treasuryHash)), royalty);
+        continueAs(State { tokenId: tokenId, owner: buyer, mode: FREE, price: 0 });
+    }
+}

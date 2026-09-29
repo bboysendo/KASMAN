@@ -1,0 +1,112 @@
+pragma silverscript ^0.1.0;
+
+// Issuance controller for KASMAN (KCC20.sil), adapted from the official KCC20Minter example.
+// Mints a KasmanRewards record's points when its owner claims them in the same transaction:
+// points * tokensPerPoint KASMAN to the owner, never past the supply cap. No key can mint;
+// the admin key only initializes the minter once. `amount` is the remaining supply.
+contract DailyMinter(
+    pubkey admin,
+    byte[32] initKCC20Covid,
+    int initAmount,
+    bool initInitialized,
+    int templatePrefixLen,
+    int templateSuffixLen,
+    byte[32] expectedTemplateHash,
+    byte[32] rewardsCovid,
+    int rewardsPrefixLen,
+    int rewardsSuffixLen,
+    byte[32] rewardsTemplateHash,
+    int tokensPerPoint
+) {
+    byte[32] kcc20Covid = initKCC20Covid;
+    int amount = initAmount;
+    bool initialized = initInitialized;
+
+    struct KCC20State {
+        byte[32] ownerIdentifier;
+        byte identifierType;
+        int amount;
+        bool isMinter;
+    }
+
+    // Same field order and types as KasmanRewards' state.
+    struct RewardsState {
+        bool root;
+        byte[32] owner;
+        int points;
+        int lastClaimDaa;
+    }
+
+    byte constant IDENTIFIER_PUBKEY = 0x00;
+    byte constant IDENTIFIER_COVENANT_ID = 0x02;
+
+    function checkMinterKcc20NewState(KCC20State minterKcc20NewState, int kcc20InputIdx) {
+        byte[32] controllerId = OpInputCovenantId(this.activeInputIndex);
+        require(minterKcc20NewState.ownerIdentifier == controllerId);
+        require(minterKcc20NewState.identifierType == IDENTIFIER_COVENANT_ID);
+        require(minterKcc20NewState.isMinter);
+        validateOutputStateWithInputTemplate(
+            OpCovOutputIdx(kcc20Covid, 0),
+            minterKcc20NewState,
+            kcc20InputIdx,
+            templatePrefixLen,
+            templateSuffixLen,
+            expectedTemplateHash
+        );
+    }
+
+    #[covenant.singleton]
+    function init(State prevState, State newState, sig s) {
+        require(!initialized);
+        require(newState.kcc20Covid == OpOutputCovenantId(0));
+        require(newState.amount == prevState.amount);
+        require(newState.initialized);
+        require(checkSig(s, admin));
+    }
+
+    #[covenant.singleton]
+    function claim(State prevState, State newState, int recordIdx, int now, KCC20State minterKcc20NewState) {
+        require(initialized);
+        require(newState.initialized);
+        require(newState.kcc20Covid == prevState.kcc20Covid);
+
+        // The record: genuine (covenant ID + template), continued as the same owner with no
+        // points left, as its own `claim` entry makes it (owner's wallet input, wait, `now`).
+        require(OpInputCovenantId(recordIdx) == rewardsCovid);
+        RewardsState before = readInputStateWithTemplate(recordIdx, rewardsPrefixLen, rewardsSuffixLen, rewardsTemplateHash);
+        require(!before.root);
+        require(OpAuthOutputCount(recordIdx) == 1);
+        validateOutputStateWithInputTemplate(
+            OpAuthOutputIdx(recordIdx, 0),
+            RewardsState { root: false, owner: before.owner, points: 0, lastClaimDaa: now },
+            recordIdx,
+            rewardsPrefixLen,
+            rewardsSuffixLen,
+            rewardsTemplateHash
+        );
+
+        int minted = before.points * tokensPerPoint;
+        if (minted > amount) {
+            minted = amount;
+        }
+        require(minted > 0);
+
+        // KCC20: one minter branch in, the minter branch and the owner's tokens out.
+        require(OpCovOutputCount(kcc20Covid) == 2);
+        require(OpCovInputCount(kcc20Covid) == 1);
+        int kcc20InputIdx = OpCovInputIdx(kcc20Covid, 0);
+        checkMinterKcc20NewState(minterKcc20NewState, kcc20InputIdx);
+        validateOutputStateWithInputTemplate(
+            OpCovOutputIdx(kcc20Covid, 1),
+            KCC20State { ownerIdentifier: before.owner, identifierType: IDENTIFIER_PUBKEY, amount: minted, isMinter: false },
+            kcc20InputIdx,
+            templatePrefixLen,
+            templateSuffixLen,
+            expectedTemplateHash
+        );
+
+        KCC20State kcc20Before = readInputStateWithTemplate(kcc20InputIdx, templatePrefixLen, templateSuffixLen, expectedTemplateHash);
+        require(minterKcc20NewState.amount == kcc20Before.amount);
+        require(newState.amount == amount - minted);
+    }
+}

@@ -1,0 +1,15 @@
+pragma silverscript ^0.1.0;
+
+// Monthly prize pool. Entry fees, lives and skins are paid to this contract's
+// P2SH address; `month` (YYYYMM) makes each month its own address.
+// Funds can leave only in one output, to the address the oracle (the owner's
+// offline key) signed for this month together with the leaderboard root.
+// No time lock: the owner decides when to pay.
+contract KasmanPool(pubkey oracle, int month) {
+    entry payout(datasig oracleSig, byte[] winner, byte[32] root) {
+        require(tx.outputs.length == 1);
+        require(tx.outputs[0].scriptPubKey == winner);
+        byte[] message = byte[]("kasman-payout") + (month as byte[8]) + root + winner;
+        require(checkMsgSig(oracleSig, sha256(message), oracle));
+    }
+}

@@ -1,0 +1,30 @@
+{
+  "network": "testnet",
+  "oracle": "591ececf144fce8c9def60def641db81870270243ef253cf46481d2cc655baa2",
+  "pools": {
+    "2026-09": "kaspatest:pqdctkfrafhtchpfsg65t4esyskpds9h7yys45gur44emcjkn5vw5w8px8lps",
+    "2026-10": "kaspatest:ppux5vj9mgl7k3szhv3ahqudln3g6fmcsg3m95tgm2ktv0l0gd2jvxw7nujs2",
+    "2026-11": "kaspatest:prcfnflg7t0urchs6c3tayxsgdv4nhqtjc0vv58heglcn5tekpav595s3zx92",
+    "2026-12": "kaspatest:pr8q85rc274lmy4v09lejzza8raf6zqglw04jecd8gmywuve4jqucya92qq52",
+    "2027-01": "kaspatest:pppyxjjlkeetfs38ascz4ljvgfy3lhfm5mfcv3dx50x0zw599a9skwr8tjeps",
+    "2027-02": "kaspatest:ppekea9yxj4s3jsy09vd5vg0stuxjtewj9dgqvc78hzg5pu5kwl8vje8hd7sr",
+    "2027-03": "kaspatest:pre5muawvldkwq7vvqa0s4w6yhm4rzf703ee86aytzfv6pcmlwljsevnzjgg6",
+    "2027-04": "kaspatest:pryh2q4svvyg4rsvh2sr0gtmr7jlq69mwhsxj7xp46g6xuvdyxq5jkyyerpx3",
+    "2027-05": "kaspatest:pz28uxmqpe50zgzt05mz5fgukxjklrxl3mavv4fgwpr7as02a7hjg3qwnex5l",
+    "2027-06": "kaspatest:prg5mx25chj0uc07v5yq8sgh0j8h7akfjjxcu40y9xv5fcyxmjrkq9p3gy7xc",
+    "2027-07": "kaspatest:ppfz5xese03nkwmu4kxrtnwxwz88atq434gdued3upa48xhaxuer5q7t76kjg",
+    "2027-08": "kaspatest:ppwemhf73nznqv3s0ptjza3kkglxshkxzq7gnn4l362u7k6l987hcskc5jmg4",
+    "2027-09": "kaspatest:pqfw07hdrz6a276454s9njjzd06kldf2ac36zqry6yjck9fvkc7cwazmztwl0",
+    "2027-10": "kaspatest:ppsvd9ul3xvalspe493pjjfen733ck7yuwt4numf33ny8myhg04y6d5kukysw",
+    "2027-11": "kaspatest:pzyj329ydn26yz25kzprt9acul35tj464mmt0vkfqlx9d7gx0q2p7lccp0k3h",
+    "2027-12": "kaspatest:pqskuqn8sfcyfp7nr324d9du6ne4937c6xmkgk7ysdmg7g9k94xwxgasjnxwy",
+    "2028-01": "kaspatest:pqrjlqujjeeu7mds2teskrzpq3g20vzfqg69wadhjcdrdmplegkggd8wva3vg",
+    "2028-02": "kaspatest:pz6ayetf0hqeey4mlecp0zr2jcfr562m6axnchdh3wwhmrq2ys655hefgsx0e",
+    "2028-03": "kaspatest:ppk3h6c8q5ll0grn3gt5tda8dfucgx3h2dhqspxtncg5mj2eae7ew25rcnl6f",
+    "2028-04": "kaspatest:pzgh0963va7jah5xfdepry77vs7uv9lk0ay9dqgt9hm7ex6lhcpwcyq6y76mq",
+    "2028-05": "kaspatest:prj2rxu467x9y9kmqmxwlz39f3ehfyznxf7v79fcynrewfvpgwzzjvv3f68lw",
+    "2028-06": "kaspatest:prtwe0qd6hdrf7s5cjcmwr6s0cqqhrjkkwx3k4nzj7kkw9hdsssuy06wg949t",
+    "2028-07": "kaspatest:pp43wmvspegfzst5aem8mn7fqvtmmnvugcgyykqfm6vdfwt8jtg9usafzvqte",
+    "2028-08": "kaspatest:prhr5ahwzv2uwepprrejrud6g80hnap3ll5lrd4c5qkjyszzamakcmsxyfx4l"
+  }
+}

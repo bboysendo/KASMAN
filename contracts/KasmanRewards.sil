@@ -1,0 +1,133 @@
+pragma silverscript ^0.1.0;
+
+// Kasman rewards ledger. One covenant ID for the whole game; every player's data is one UTXO
+// ("record") of it, so records cannot be forged. Points are tenths of a daily reward:
+// DailyMinter mints `points * tokensPerPoint` KASMAN when the owner claims.
+//
+// root (one UTXO): `open` creates a record for anyone paying an entry to a KasmanPool (day 1).
+// record:
+//   play     paying an entry counts the day at 1.0x (10 points), at most once per 24 h.
+//   checkIn  a staked (LOCKED) KasmanNFT of the same owner counts the day at its rarity's
+//            multiplier, at most once per 24 h per record and per NFT.
+//   claim    resets points; allowed every 7 days, or sooner with a staked NFT (by rarity).
+// A day is 24 h (`daaPerDay`) since the record was last updated, not a calendar day.
+contract KasmanRewards(
+    byte[] poolPrefix,
+    byte[] poolSuffix,
+    int entryPrice,
+    int daaPerDay,
+    byte[32] nftCovid,
+    int nftPrefixLen,
+    int nftSuffixLen,
+    byte[32] nftTemplateHash,
+    bool initRoot,
+    byte[32] initOwner,
+    int initPoints,
+    int initLastClaimDaa
+) {
+    int constant LOCKED = 2;
+    int constant BASE_POINTS = 10;
+
+    bool root = initRoot;
+    byte[32] owner = initOwner;
+    int points = initPoints;
+    int lastClaimDaa = initLastClaimDaa;  // DAA score the owner stated at the last claim
+
+    // Same field order and types as KasmanNFT's state.
+    struct NftState {
+        int tokenId;
+        byte[32] owner;
+        int mode;
+        int price;
+    }
+
+    // Same rule as KasmanNFT: the owner spends one of their own wallet UTXOs in this transaction.
+    function ownerSigned(int ownerInput) {
+        require(tx.inputs[ownerInput].scriptPubKey == byte[](new ScriptPubKeyP2PK(pubkey(owner))));
+    }
+
+    function continueAs(State next) {
+        require(OpAuthOutputCount(this.activeInputIndex) == 1);
+        validateOutputState(OpAuthOutputIdx(this.activeInputIndex, 0), next);
+    }
+
+    // Output `poolIndex` pays at least one entry to the KasmanPool of `month` (YYYYMM): its
+    // redeem script is the pool template with `month` pushed as 3 bytes (see contracts/tool).
+    function paysEntry(int poolIndex, int month) {
+        require(month > 0 && month < 8388608);
+        byte[] redeem = poolPrefix + (month as byte[3]) + poolSuffix;
+        require(tx.outputs[poolIndex].scriptPubKey == byte[](new ScriptPubKeyP2SHFromRedeemScript(redeem)));
+        require(tx.outputs[poolIndex].value >= entryPrice);
+    }
+
+    // The staked NFT at `nftIdx`: genuine, LOCKED, same owner, taking part through `stakeUse`
+    // (its own script checks the owner's wallet input and a day since its last use).
+    function stakedNft(int nftIdx): int {
+        require(OpInputCovenantId(nftIdx) == nftCovid);
+        NftState nft = readInputStateWithTemplate(nftIdx, nftPrefixLen, nftSuffixLen, nftTemplateHash);
+        require(nft.mode == LOCKED);
+        require(nft.owner == owner);
+        require(OpAuthOutputCount(nftIdx) == 1);
+        validateOutputStateWithInputTemplate(OpAuthOutputIdx(nftIdx, 0), nft, nftIdx, nftPrefixLen, nftSuffixLen, nftTemplateHash);
+        return nft.tokenId;
+    }
+
+    // Rarity by token id (src/lib/prices.ts RARITIES): multiplier in tenths.
+    function multiplier(int tokenId): int {
+        int m = 11;
+        if (tokenId > 1500) { m = 13; }
+        if (tokenId > 2400) { m = 16; }
+        if (tokenId > 2850) { m = 20; }
+        return m;
+    }
+
+    // Days between claims: 5 / 3 / 2 / 1.
+    function claimWaitDays(int tokenId): int {
+        int d = 5;
+        if (tokenId > 1500) { d = 3; }
+        if (tokenId > 2400) { d = 2; }
+        if (tokenId > 2850) { d = 1; }
+        return d;
+    }
+
+    entry open(byte[32] newOwner, int poolIndex, int month) {
+        require(root);
+        paysEntry(poolIndex, month);
+        require(OpAuthOutputCount(this.activeInputIndex) == 2);
+        validateOutputState(OpAuthOutputIdx(this.activeInputIndex, 0), State {
+            root: true, owner: owner, points: 0, lastClaimDaa: 0
+        });
+        validateOutputState(OpAuthOutputIdx(this.activeInputIndex, 1), State {
+            root: false, owner: newOwner, points: BASE_POINTS, lastClaimDaa: 0
+        });
+    }
+
+    entry play(int ownerInput, int poolIndex, int month) {
+        require(!root);
+        ownerSigned(ownerInput);
+        require(this.ageDaa >= daaPerDay);
+        paysEntry(poolIndex, month);
+        continueAs(State { root: false, owner: owner, points: points + BASE_POINTS, lastClaimDaa: lastClaimDaa });
+    }
+
+    entry checkIn(int ownerInput, int nftIdx) {
+        require(!root);
+        ownerSigned(ownerInput);
+        require(this.ageDaa >= daaPerDay);
+        continueAs(State { root: false, owner: owner, points: points + multiplier(stakedNft(nftIdx)), lastClaimDaa: lastClaimDaa });
+    }
+
+    // `now` is a DAA score the transaction cannot be mined before; a negative `nftIdx` = no NFT.
+    entry claim(int ownerInput, int now, int nftIdx) {
+        require(!root);
+        require(points > 0);
+        ownerSigned(ownerInput);
+        require(tx.daa >= now);
+        int waitDays = 7;
+        if (nftIdx >= 0) {
+            waitDays = claimWaitDays(stakedNft(nftIdx));
+        }
+        require(now >= lastClaimDaa + waitDays * daaPerDay);
+        continueAs(State { root: false, owner: owner, points: 0, lastClaimDaa: now });
+    }
+}
