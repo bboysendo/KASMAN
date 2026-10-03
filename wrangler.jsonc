@@ -12,8 +12,8 @@
     "KASPA_API": "https://api-tn10.kaspa.org"
   },
   "d1_databases": [
-    // Create with `pnpm exec wrangler d1 create kasman` and paste its id here.
-    { "binding": "DB", "database_name": "kasman", "database_id": "00000000-0000-0000-0000-000000000000" }
+    // Created with `pnpm exec wrangler d1 create kasman` (WEUR).
+    { "binding": "DB", "database_name": "kasman", "database_id": "d8519479-74d4-4ba5-a7b9-57efac5511f3" }
   ],
   // Replay re-simulation (worker/verifier.ts). SQLite-backed: the only kind on Workers Free.
   "durable_objects": {

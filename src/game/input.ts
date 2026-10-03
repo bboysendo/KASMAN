@@ -1,6 +1,9 @@
+import type { Keymap } from "../store";
 import { DOWN, LEFT, NONE, RIGHT, UP } from "./engine/constants";
 
-const KEYS: Record<string, number> = {
+// WASD and arrows always work; a custom keymap.up/down/left/right adds another key on top,
+// so rebinding can never lock a player out of moving.
+const BASE_KEYS: Record<string, number> = {
   ArrowUp: UP, KeyW: UP,
   ArrowLeft: LEFT, KeyA: LEFT,
   ArrowDown: DOWN, KeyS: DOWN,
@@ -10,9 +13,15 @@ const SWIPE_PX = 24;
 // Standard gamepad mapping: d-pad buttons 12..15.
 const PAD_BUTTONS: [number, number][] = [[12, UP], [14, LEFT], [13, DOWN], [15, RIGHT]];
 
+type Action = "shield" | "freeze" | "surge" | "speed" | "magnet" | "ghosthunt" | "life";
+
 export interface InputOptions {
   onPause: () => void;
   gamepadPauseButton: number;
+  /** Read on every key event: Settings sits beside the live game, so a rebind must apply without remounting. */
+  getKeymap: () => Keymap;
+  /** Called on a fresh (non-repeat) press of keymap.shield / .freeze / .surge / .speed / .magnet / .ghosthunt / .life. */
+  onAction?: (action: Action) => void;
 }
 
 /**
@@ -21,22 +30,48 @@ export interface InputOptions {
  * `held()` returns the direction currently held down, or NONE.
  */
 export function createInput(surface: HTMLElement, opts: InputOptions) {
+  const keyTables = () => {
+    const keymap = opts.getKeymap();
+    const KEYS: Record<string, number> = {
+      ...BASE_KEYS,
+      [keymap.up]: UP,
+      [keymap.down]: DOWN,
+      [keymap.left]: LEFT,
+      [keymap.right]: RIGHT,
+    };
+    const ACTIONS: Record<string, Action> = {
+      [keymap.shield]: "shield",
+      [keymap.freeze]: "freeze",
+      [keymap.surge]: "surge",
+      [keymap.speed]: "speed",
+      [keymap.magnet]: "magnet",
+      [keymap.ghosthunt]: "ghosthunt",
+      [keymap.life]: "life",
+    };
+    return { KEYS, ACTIONS };
+  };
+
   let pending = NONE;
   const press = (dir: number) => (pending = dir);
 
   let heldKeys: number[] = []; // most recent last
   const onKeyUp = (e: KeyboardEvent) => {
+    const { KEYS } = keyTables();
     if (e.code in KEYS) heldKeys = heldKeys.filter((d) => d !== KEYS[e.code]);
   };
   const onBlur = () => (heldKeys = []);
 
   const onKey = (e: KeyboardEvent) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    const { KEYS, ACTIONS } = keyTables();
     if (e.code in KEYS) {
       e.preventDefault();
       if (e.repeat) return;
       press(KEYS[e.code]);
       heldKeys = [...heldKeys.filter((d) => d !== KEYS[e.code]), KEYS[e.code]];
+    } else if (e.code in ACTIONS) {
+      if (e.repeat) return;
+      opts.onAction?.(ACTIONS[e.code]);
     } else if (e.code === "KeyP" || e.code === "Escape") {
       opts.onPause();
     }
