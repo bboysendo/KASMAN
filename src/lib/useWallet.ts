@@ -2,7 +2,10 @@ import { useState } from "react";
 import { useStore } from "../store";
 import { connectWallet, disconnectWallet, type Account } from "./leaderboard";
 
-const SIGNED_OUT: Account = { address: null, name: "", tickets: 0, lives: 0, skins: [], freeGamesLeft: 0 };
+const SIGNED_OUT: Account = {
+  address: null, name: "", xHandle: null, tickets: 0, lives: 0, skins: [], freeGamesLeft: 0,
+  potions: { shield: 0, freeze: 0, surge: 0, speed: 0, magnet: 0, ghosthunt: 0 }, quests: [], shards: 0,
+};
 
 /** Connected wallet address plus connect / disconnect actions with their own busy and error state. */
 export function useWallet() {

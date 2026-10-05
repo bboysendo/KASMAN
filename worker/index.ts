@@ -10,7 +10,7 @@
 import { FPS } from "../src/game/engine/constants";
 import { SKINS } from "../src/game/render/skins";
 import { LOCKED, config as onchain, hexToBytes, nftRedeem, p2shAddress, parseNft, parsePayload, pushes, schnorrAddress } from "../src/lib/covenant";
-import { ENTRY_FEE_KAS, LIFE_PACKS, currentMonth, rarityOf, today } from "../src/lib/prices";
+import { CHESTS, ENTRY_FEE_KAS, GAMES_GOAL, LIFE_PACKS, MAX_POTION_ORDER_QTY, POTIONS, QUESTS, X_HANDLE_RE, currentMonth, rarityOf, today } from "../src/lib/prices";
 import { verifyWalletSignature } from "./auth";
 import pools from "./pools.json";
 import type { Verified } from "./verifier";
@@ -22,6 +22,14 @@ export interface Env {
   VERIFIER: DurableObjectNamespace<import("./verifier").Verifier>;
   /** Kaspa REST API matching pools.json's network, e.g. https://api.kaspa.org */
   KASPA_API: string;
+  /**
+   * Local-only escape hatch for a broken/lagging Kaspa REST indexer: skips verifyPayment's chain
+   * checks so the rest of the flow (ticket, game start, leaderboard) can be tested without it.
+   * Must only ever be set in `.dev.vars` (gitignored, read by `wrangler dev` only — never by
+   * `wrangler deploy`). Never add this to `wrangler.jsonc`'s `vars` or a deployed environment: it
+   * turns off the only proof that an entry, lives pack or skin was actually paid for.
+   */
+  DEV_SKIP_TX_VERIFICATION?: string;
 }
 
 const SOMPI = 100_000_000;
@@ -57,8 +65,8 @@ export function poolAddress(month: string) {
   return address;
 }
 
-/** Price of an order in sompi. Prices come from the same tables the UI shows. */
-export function price(kind: string, item: string): number {
+/** Price of an order in sompi. Prices come from the same tables the UI shows. `qty` only applies to potions. */
+export function price(kind: string, item: string, qty: number): number {
   if (kind === "entry") return ENTRY_FEE_KAS * SOMPI;
   if (kind === "lives") {
     const pack = LIFE_PACKS.find((p) => String(p.lives) === item);
@@ -67,6 +75,10 @@ export function price(kind: string, item: string): number {
   if (kind === "skin") {
     const skin = SKINS.find((s) => s.id === item && s.price > 0);
     if (skin) return skin.price * SOMPI;
+  }
+  if (kind === "potion") {
+    const potion = POTIONS.find((p) => p.id === item);
+    if (potion) return Math.round(potion.price * qty * SOMPI);
   }
   throw new HttpError(400, "Unknown item");
 }
@@ -97,22 +109,80 @@ async function requireAddress(req: Request, env: Env) {
   return address;
 }
 
+const EMPTY_POTIONS = { shield: 0, freeze: 0, surge: 0, speed: 0, magnet: 0, ghosthunt: 0 };
+
 async function me(env: Env, address: string | null) {
-  if (!address) return { address: null, name: "", tickets: 0, lives: 0, skins: [] as string[], freeGamesLeft: 0 };
-  const [player, inv, free] = await Promise.all([
-    env.DB.prepare("SELECT name FROM players WHERE address = ?").bind(address).first<{ name: string }>(),
+  if (!address) {
+    return {
+      address: null, name: "", xHandle: null as string | null, tickets: 0, lives: 0, skins: [] as string[], freeGamesLeft: 0,
+      potions: EMPTY_POTIONS, quests: [] as string[], shards: 0,
+    };
+  }
+  const [player, inv, free, quests] = await Promise.all([
+    env.DB.prepare("SELECT name, x_handle FROM players WHERE address = ?").bind(address).first<{ name: string; x_handle: string | null }>(),
     env.DB.prepare("SELECT kind, item, qty FROM inventory WHERE address = ?").bind(address).all<{ kind: string; item: string; qty: number }>(),
     env.DB.prepare("SELECT granted - used AS left FROM free_games WHERE address = ? AND day = ?").bind(address, today()).first<{ left: number }>(),
+    env.DB.prepare("SELECT quest FROM quest_claims WHERE address = ?").bind(address).all<{ quest: string }>(),
   ]);
   const qty = (kind: string) => inv.results.find((r) => r.kind === kind)?.qty ?? 0;
+  const potionQty = (item: string) => inv.results.find((r) => r.kind === "potion" && r.item === item)?.qty ?? 0;
   return {
     address,
     name: player?.name ?? "",
+    xHandle: player?.x_handle ?? null,
     tickets: qty("ticket"),
     lives: qty("lives"),
     skins: inv.results.filter((r) => r.kind === "skin").map((r) => r.item),
     freeGamesLeft: free?.left ?? 0,
+    potions: {
+      shield: potionQty("shield"), freeze: potionQty("freeze"), surge: potionQty("surge"),
+      speed: potionQty("speed"), magnet: potionQty("magnet"), ghosthunt: potionQty("ghosthunt"),
+    },
+    quests: quests.results.map((r) => r.quest),
+    shards: qty("shard"),
   };
+}
+
+/** Crafts a chest: spends its Puzzle Shard cost and credits `perPotion` of each potion plus `lives` Extra Lives, instantly. */
+async function craftChest(env: Env, address: string, chestId: string) {
+  const chest = CHESTS.find((c) => c.id === chestId);
+  if (!chest) throw new HttpError(404, "Unknown chest");
+  const spend = await env.DB.prepare(
+    "UPDATE inventory SET qty = qty - ?1 WHERE address = ?2 AND kind = 'shard' AND item = '' AND qty >= ?1",
+  ).bind(chest.cost, address).run();
+  if (spend.meta.changes !== 1) throw new HttpError(402, "Not enough Puzzle Shards");
+  await env.DB.batch([
+    ...POTIONS.map((p) => addInventory(env, address, "potion", p.id, chest.perPotion)),
+    addInventory(env, address, "lives", "", chest.lives),
+  ]);
+  return json(await me(env, address));
+}
+
+/** Registers (or updates) the wallet's X handle. Unique case-insensitively (schema.sql index). */
+async function setXHandle(env: Env, address: string, raw: string) {
+  const handle = raw.trim().replace(/^@/, "");
+  if (!X_HANDLE_RE.test(handle)) throw new HttpError(400, "Enter a valid X handle");
+  await env.DB.prepare("UPDATE players SET x_handle = ? WHERE address = ?")
+    .bind(handle, address)
+    .run()
+    .catch(() => {
+      throw new HttpError(409, "This X handle is already registered to another wallet");
+    });
+  return json(await me(env, address));
+}
+
+/** One-time reward per wallet per quest; self-reported (no X API check yet). */
+async function claimQuest(env: Env, address: string, questId: string) {
+  const quest = QUESTS.find((q) => q.id === questId);
+  if (!quest) throw new HttpError(404, "Unknown quest");
+  const player = await env.DB.prepare("SELECT x_handle FROM players WHERE address = ?").bind(address).first<{ x_handle: string | null }>();
+  if (!player?.x_handle) throw new HttpError(400, "Register your X handle first");
+  const claimed = await env.DB.prepare("INSERT OR IGNORE INTO quest_claims (address, quest, claimed_at) VALUES (?, ?, ?)")
+    .bind(address, questId, Date.now())
+    .run();
+  if (claimed.meta.changes !== 1) throw new HttpError(409, "Quest already claimed");
+  await addInventory(env, address, quest.reward.kind, quest.reward.item, quest.reward.qty).run();
+  return json(await me(env, address));
 }
 
 const addInventory = (env: Env, address: string, kind: string, item: string, qty: number) =>
@@ -147,6 +217,8 @@ const hexToText = (hex: string) => new TextDecoder().decode(new Uint8Array((hex.
  * the payer. Throws 202 while the transaction is not accepted yet, so the client can retry.
  */
 export async function verifyPayment(env: Env, txId: string, order: { id: string; pool: string; sompi: number; address: string }) {
+  // See Env.DEV_SKIP_TX_VERIFICATION: local dev only, never on a deployed Worker.
+  if (env.DEV_SKIP_TX_VERIFICATION === "true") return;
   const tx = await kaspaTx(env, txId);
   if (parsePayload(hexToText(tx.payload ?? ""))?.orderId !== order.id) throw new HttpError(400, "Transaction is for another order");
   const paid = (tx.outputs ?? []).filter((o) => o.script_public_key_address === order.pool).reduce((sum, o) => sum + Number(o.amount), 0);
@@ -183,6 +255,7 @@ async function grantFreeGames(env: Env, address: string, txId: string) {
 export interface Row {
   address: string;
   name: string;
+  xHandle: string | null;
   totalScore: number;
   games: number;
   bestScore: number;
@@ -194,13 +267,21 @@ export interface Row {
 /** Ranked by total points; faster full clear breaks ties; address makes the order total. One row read per player. */
 export async function leaderboard(env: Env, month: string): Promise<Row[]> {
   const { results } = await env.DB.prepare(
-    `SELECT m.address, COALESCE(p.name, 'Anonymous') AS name, m.total AS totalScore, m.games, m.best_score AS bestScore,
+    `SELECT m.address, COALESCE(p.name, 'Anonymous') AS name, p.x_handle AS xHandle, m.total AS totalScore, m.games, m.best_score AS bestScore,
        m.best_level AS bestLevel, m.best_frames AS bestFrames, m.best_score_frames AS bestScoreFrames
      FROM monthly m LEFT JOIN players p ON p.address = m.address
      WHERE m.month = ?
      ORDER BY m.total DESC, m.best_frames IS NULL, m.best_frames ASC, m.address ASC`,
   ).bind(month).all<Row>();
   return results;
+}
+
+/** Paid entries (1 KAS each) credited this month: progress toward the `GAMES_GOAL` the pool needs before it's considered unlocked. */
+async function paidGamesCount(env: Env, month: string) {
+  const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM orders WHERE kind = 'entry' AND month = ? AND paid_at IS NOT NULL")
+    .bind(month)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 /** The month's ranking and every game's result, exactly as hashed into the payout root. */
@@ -248,8 +329,18 @@ async function submitScore(env: Env, address: string, body: Record<string, unkno
   // Pauses only add wall time, so a real run always took at least this long.
   if (now - game.started_at < (result.frames / FPS) * 1000 * 0.95) throw new HttpError(400, "Run finished faster than real time");
   if (result.score !== body.score) throw new HttpError(400, "Score does not match replay");
-  const owned = await env.DB.prepare("SELECT qty FROM inventory WHERE address = ? AND kind = 'lives' AND item = ''").bind(address).first<{ qty: number }>();
+  const [owned, potions] = await Promise.all([
+    env.DB.prepare("SELECT qty FROM inventory WHERE address = ? AND kind = 'lives' AND item = ''").bind(address).first<{ qty: number }>(),
+    env.DB.prepare("SELECT item, qty FROM inventory WHERE address = ? AND kind = 'potion'").bind(address).all<{ item: string; qty: number }>(),
+  ]);
   if (result.boughtLives > (owned?.qty ?? 0)) throw new HttpError(400, "Replay uses more bought lives than owned");
+  const ownedPotion = (item: string) => potions.results.find((r) => r.item === item)?.qty ?? 0;
+  if (result.shieldUsed > ownedPotion("shield")) throw new HttpError(400, "Replay uses more Ghost Shield than owned");
+  if (result.freezeUsed > ownedPotion("freeze")) throw new HttpError(400, "Replay uses more Ghost Freeze than owned");
+  if (result.surgeUsed > ownedPotion("surge")) throw new HttpError(400, "Replay uses more Score Surge than owned");
+  if (result.speedUsed > ownedPotion("speed")) throw new HttpError(400, "Replay uses more Speed Coffee than owned");
+  if (result.magnetUsed > ownedPotion("magnet")) throw new HttpError(400, "Replay uses more Ghost Magnet than owned");
+  if (result.ghosthuntUsed > ownedPotion("ghosthunt")) throw new HttpError(400, "Replay uses more Ghost Hunt than owned");
 
   // One transaction. The game update claims the submit with a token; the other statements only
   // act when this request holds it, so a concurrent second submit of the same game does nothing.
@@ -264,6 +355,23 @@ async function submitScore(env: Env, address: string, body: Record<string, unkno
     ).bind(now, token, month, result.score, result.level, result.frame, result.won ? 1 : 0, game.id),
     env.DB.prepare(`UPDATE inventory SET qty = qty - ?3 WHERE address = ?4 AND kind = 'lives' AND item = '' AND ?3 > 0 AND ${claimed}`)
       .bind(game.id, token, result.boughtLives, address),
+    env.DB.prepare(`UPDATE inventory SET qty = qty - ?3 WHERE address = ?4 AND kind = 'potion' AND item = 'shield' AND ?3 > 0 AND ${claimed}`)
+      .bind(game.id, token, result.shieldUsed, address),
+    env.DB.prepare(`UPDATE inventory SET qty = qty - ?3 WHERE address = ?4 AND kind = 'potion' AND item = 'freeze' AND ?3 > 0 AND ${claimed}`)
+      .bind(game.id, token, result.freezeUsed, address),
+    env.DB.prepare(`UPDATE inventory SET qty = qty - ?3 WHERE address = ?4 AND kind = 'potion' AND item = 'surge' AND ?3 > 0 AND ${claimed}`)
+      .bind(game.id, token, result.surgeUsed, address),
+    env.DB.prepare(`UPDATE inventory SET qty = qty - ?3 WHERE address = ?4 AND kind = 'potion' AND item = 'speed' AND ?3 > 0 AND ${claimed}`)
+      .bind(game.id, token, result.speedUsed, address),
+    env.DB.prepare(`UPDATE inventory SET qty = qty - ?3 WHERE address = ?4 AND kind = 'potion' AND item = 'magnet' AND ?3 > 0 AND ${claimed}`)
+      .bind(game.id, token, result.magnetUsed, address),
+    env.DB.prepare(`UPDATE inventory SET qty = qty - ?3 WHERE address = ?4 AND kind = 'potion' AND item = 'ghosthunt' AND ?3 > 0 AND ${claimed}`)
+      .bind(game.id, token, result.ghosthuntUsed, address),
+    env.DB.prepare(
+      `INSERT INTO inventory (address, kind, item, qty)
+       SELECT ?4, 'shard', '', ?3 WHERE ?3 > 0 AND ${claimed}
+       ON CONFLICT (address, kind, item) DO UPDATE SET qty = qty + excluded.qty`,
+    ).bind(game.id, token, result.shardsCollected, address),
     env.DB.prepare(
       `INSERT INTO monthly (month, address, total, games, best_score, best_level, best_frames, best_score_frames)
        SELECT ?3, ?4, ?5, 1, ?5, ?6, ?7, ?8 WHERE ${claimed}
@@ -277,7 +385,7 @@ async function submitScore(env: Env, address: string, body: Record<string, unkno
          best_score = MAX(best_score, excluded.best_score)`,
     ).bind(game.id, token, month, address, result.score, result.level, bestFrames, result.frame),
   ]).catch(() => {
-    throw new HttpError(400, "Replay uses more bought lives than owned");
+    throw new HttpError(400, "Replay uses more bought lives or potions than owned");
   });
   if (results[0].meta.changes !== 1) throw new HttpError(409, "This run was already submitted");
   return { score: result.score, month };
@@ -309,20 +417,22 @@ async function handle(req: Request, env: Env): Promise<Response> {
     const address = await requireAddress(req, env);
     const kind = String(body.kind);
     const item = kind === "entry" ? "" : String(body.item ?? "");
-    const sompi = price(kind, item);
+    // Only potions are bought by the unit; every other kind is always qty 1 (lives encode their count in `item`).
+    const qty = kind === "potion" ? Math.max(1, Math.min(MAX_POTION_ORDER_QTY, Math.trunc(Number(body.qty ?? 1)) || 1)) : 1;
+    const sompi = price(kind, item, qty);
     const month = currentMonth();
     const order = { id: randomHex(8), pool: poolAddress(month) };
-    await env.DB.prepare("INSERT INTO orders (id, address, kind, item, sompi, pool, month, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(order.id, address, kind, item, sompi, order.pool, month, Date.now())
+    await env.DB.prepare("INSERT INTO orders (id, address, kind, item, qty, sompi, pool, month, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(order.id, address, kind, item, qty, sompi, order.pool, month, Date.now())
       .run();
-    return json({ orderId: order.id, address: order.pool, sompi, month, payload: orderPayload(order.id) });
+    return json({ orderId: order.id, address: order.pool, sompi, qty, month, payload: orderPayload(order.id) });
   }
 
   if (path === "/api/pay" && req.method === "POST") {
     const address = await requireAddress(req, env);
     const order = await env.DB.prepare("SELECT * FROM orders WHERE id = ? AND address = ?")
       .bind(String(body.orderId), address)
-      .first<{ id: string; kind: string; item: string; sompi: number; pool: string; address: string; paid_at: number | null }>();
+      .first<{ id: string; kind: string; item: string; qty: number; sompi: number; pool: string; address: string; paid_at: number | null }>();
     if (!order) throw new HttpError(404, "Unknown order");
     if (!order.paid_at) {
       const txId = String(body.txId);
@@ -334,7 +444,11 @@ async function handle(req: Request, env: Env): Promise<Response> {
           throw new HttpError(409, "Transaction already used");
         });
       if (claim.meta.changes === 1) {
-        const [kind, item, qty] = order.kind === "entry" ? ["ticket", "", 1] : order.kind === "lives" ? ["lives", "", Number(order.item)] : ["skin", order.item, 1];
+        const [kind, item, qty] =
+          order.kind === "entry" ? ["ticket", "", 1]
+          : order.kind === "lives" ? ["lives", "", Number(order.item)]
+          : order.kind === "potion" ? ["potion", order.item, order.qty]
+          : ["skin", order.item, 1];
         await addInventory(env, address, kind as string, item as string, qty as number).run();
       }
     }
@@ -358,6 +472,12 @@ async function handle(req: Request, env: Env): Promise<Response> {
     return json({ gameId: game.id, seed: game.seed });
   }
 
+  if (path === "/api/x-handle" && req.method === "POST") return setXHandle(env, await requireAddress(req, env), String(body.handle ?? ""));
+
+  if (path === "/api/quest/claim" && req.method === "POST") return claimQuest(env, await requireAddress(req, env), String(body.quest ?? ""));
+
+  if (path === "/api/chest/craft" && req.method === "POST") return craftChest(env, await requireAddress(req, env), String(body.chest ?? ""));
+
   if (path === "/api/free" && req.method === "POST") {
     const address = await requireAddress(req, env);
     await grantFreeGames(env, address, String(body.txId));
@@ -372,10 +492,13 @@ async function handle(req: Request, env: Env): Promise<Response> {
 
   if (path === "/api/pool" && req.method === "GET") {
     const month = url.searchParams.get("month") ?? currentMonth();
-    const res = await fetch(`${env.KASPA_API}/addresses/${poolAddress(month)}/balance`);
+    const [res, paidGames] = await Promise.all([fetch(`${env.KASPA_API}/addresses/${poolAddress(month)}/balance`), paidGamesCount(env, month)]);
     if (!res.ok) throw new HttpError(502, `Kaspa API error ${res.status}`);
     const { balance } = (await res.json()) as { balance: number };
-    return json({ month, address: poolAddress(month), kas: balance / SOMPI }, { headers: { "cache-control": "public, max-age=30" } });
+    return json(
+      { month, address: poolAddress(month), kas: balance / SOMPI, paidGames, gamesGoal: GAMES_GOAL },
+      { headers: { "cache-control": "public, max-age=30" } },
+    );
   }
 
   // Available any time: the owner decides when to pay the winner.
@@ -385,8 +508,18 @@ async function handle(req: Request, env: Env): Promise<Response> {
     const exported = await monthExport(env, m);
     if (what === "export") return new Response(exported, { headers: { "content-type": "application/json" } });
     const winner = (JSON.parse(exported) as { rows: Row[] }).rows[0]?.address;
-    // No verified game this month: the pool can be moved into next month's pool.
-    return json({ month: m, winner: winner ?? poolAddress(nextMonth(m)), rollover: !winner, root: await sha256Hex(exported) });
+    const paidGames = await paidGamesCount(env, m);
+    const goalReached = paidGames >= GAMES_GOAL;
+    // No verified game, or the month closed short of the games goal: the pool can roll into next month's pool.
+    return json({
+      month: m,
+      winner: winner ?? poolAddress(nextMonth(m)),
+      paidGames,
+      gamesGoal: GAMES_GOAL,
+      goalReached,
+      rollover: !winner || !goalReached,
+      root: await sha256Hex(exported),
+    });
   }
 
   throw new HttpError(404, "Not found");

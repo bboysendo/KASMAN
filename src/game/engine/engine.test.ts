@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  BUY_LIFE, GHOST_DEFS, GHOST_HOME, LEFT, MAX_BOUGHT_LIVES, NONE, PAC_START, RIGHT, TURN_BUFFER_FRAMES, U, UP, levelTuning, modeSchedule,
+  BUY_LIFE, GHOST_DEFS, GHOST_HOME, LEFT, MAGNET_RADIUS, MAX_BOUGHT_LIVES, MAX_SHIELD_PER_LEVEL, NONE, PAC_START, RIGHT,
+  SCORE_GHOST, SCORE_PELLET, SPEED_MULT, SURGE_MULT, TURN_BUFFER_FRAMES, U, UP, USE_FREEZE, USE_GHOSTHUNT, USE_MAGNET, USE_SHIELD, USE_SPEED,
+  USE_SURGE, levelTuning, modeSchedule,
 } from "./constants";
 import { createGame, step, tileOf, type GameState } from "./game";
 import { H, MAZE_COUNT, POWER, W, mazeFor } from "./map";
@@ -24,6 +26,16 @@ function autoplay(seed: number, maxFrames: number) {
 
 const runUntil = (s: GameState, cond: () => boolean, max = 20000) => {
   for (let i = 0; i < max && !cond(); i++) step(s);
+};
+
+/** Walks Blinky onto Kasman and waits out the life, then the ready timer for the next one. */
+const loseLife = (s: GameState) => {
+  const blinky = s.ghosts[0];
+  blinky.x = s.pac.x + U / 4;
+  blinky.y = s.pac.y;
+  blinky.dir = LEFT;
+  runUntil(s, () => s.phase === "dying", 60);
+  runUntil(s, () => s.phase === "playing", 200);
 };
 
 describe("engine", () => {
@@ -108,7 +120,7 @@ describe("engine", () => {
 
   it("rejects malformed replays", () => {
     expect(decodeReplay("not base64 json")).toBeNull();
-    expect(decodeReplay(btoa(JSON.stringify({ v: 6, seed: 1, frames: 1, inputs: [[0, 9]] })))).toBeNull();
+    expect(decodeReplay(btoa(JSON.stringify({ v: 15, seed: 1, frames: 1, inputs: [[0, 11]] })))).toBeNull();
   });
 
   it("eats pellets while moving", () => {
@@ -150,14 +162,231 @@ describe("engine", () => {
     const s = createGame(9);
     const rec = createRecorder(s.seed);
     for (let i = 0; i < 300; i++) {
-      const input = i % 50 === 0 ? BUY_LIFE : NONE;
+      const input = i % 20 === 0 ? BUY_LIFE : NONE; // 15 attempts, more than the cap
       rec.record(s, input);
       step(s, input);
     }
+    expect(MAX_BOUGHT_LIVES).toBe(10);
     expect(s.livesBought).toBe(MAX_BOUGHT_LIVES);
     expect(s.lives).toBe(3 + MAX_BOUGHT_LIVES);
     const re = simulateReplay(decodeReplay(encodeReplay(rec.replay))!);
     expect(re.lives).toBe(s.lives);
+  });
+
+  it("potions are capped per level and replay verbatim", () => {
+    const s = createGame(9);
+    const rec = createRecorder(s.seed);
+    for (let i = 0; i < 300; i++) {
+      const input =
+        i % 50 === 0 ? USE_SHIELD
+        : i % 50 === 15 ? USE_SURGE
+        : i % 50 === 25 ? USE_FREEZE
+        : i % 50 === 30 ? USE_SPEED
+        : i % 50 === 35 ? USE_MAGNET
+        : i % 50 === 40 ? USE_GHOSTHUNT
+        : NONE;
+      rec.record(s, input);
+      step(s, input);
+    }
+    expect(s.shieldBought).toBeLessThanOrEqual(MAX_SHIELD_PER_LEVEL);
+    expect(s.freezeBought).toBeLessThanOrEqual(MAX_SHIELD_PER_LEVEL);
+    const re = simulateReplay(decodeReplay(encodeReplay(rec.replay))!);
+    expect(re.shieldBought).toBe(s.shieldBought);
+    expect(re.freezeBought).toBe(s.freezeBought);
+    expect(re.surgeBought).toBe(s.surgeBought);
+    expect(re.speedBought).toBe(s.speedBought);
+    expect(re.magnetBought).toBe(s.magnetBought);
+    expect(re.ghosthuntBought).toBe(s.ghosthuntBought);
+  });
+
+  it("renews each potion's cap when the level clears, but not on death", () => {
+    const s = createGame(9);
+    runUntil(s, () => s.phase === "playing");
+    for (let i = 0; i < MAX_SHIELD_PER_LEVEL; i++) step(s, USE_SHIELD);
+    expect(s.shieldBought).toBe(MAX_SHIELD_PER_LEVEL);
+    step(s, USE_SHIELD); // already at the cap: has no further effect
+    expect(s.shieldBought).toBe(MAX_SHIELD_PER_LEVEL);
+
+    // Losing a life (same level) does not renew the cap.
+    s.lives = 2;
+    s.phase = "dying";
+    s.phaseTimer = 1;
+    runUntil(s, () => s.phase === "playing");
+    expect(s.shieldBought).toBe(MAX_SHIELD_PER_LEVEL);
+
+    // Clearing the level does renew it.
+    s.pelletsLeft = 0;
+    runUntil(s, () => s.level === 2);
+    expect(s.shieldBought).toBe(0);
+    runUntil(s, () => s.phase === "playing");
+    step(s, USE_SHIELD);
+    expect(s.shieldBought).toBe(1);
+  });
+
+  it("Ghost Shield makes Kasman immune to a ghost hit", () => {
+    const s = createGame(3);
+    runUntil(s, () => s.phase === "playing");
+    step(s, USE_SHIELD);
+    expect(s.shieldTimer).toBeGreaterThan(0);
+    const blinky = s.ghosts[0];
+    blinky.x = s.pac.x + U / 4;
+    blinky.y = s.pac.y;
+    blinky.dir = LEFT;
+    const lives = s.lives;
+    runUntil(s, () => s.phase === "dying", 60);
+    expect(s.lives).toBe(lives);
+    expect(s.phase).toBe("playing");
+  });
+
+  it("Score Surge doubles points earned while active", () => {
+    const s = createGame(1);
+    runUntil(s, () => s.phase === "playing");
+    step(s, USE_SURGE);
+    expect(s.surgeTimer).toBeGreaterThan(0);
+    step(s, UP);
+    runUntil(s, () => s.score > 0, 200);
+    expect(s.score).toBe(SCORE_PELLET * SURGE_MULT);
+  });
+
+  it("Ghost Freeze stops every ghost from moving", () => {
+    const s = createGame(3);
+    runUntil(s, () => s.phase === "playing");
+    step(s, USE_FREEZE);
+    expect(s.freezeTimer).toBeGreaterThan(0);
+    const before = s.ghosts.map((g) => ({ x: g.x, y: g.y }));
+    for (let i = 0; i < 30; i++) step(s);
+    expect(s.ghosts.map((g) => ({ x: g.x, y: g.y }))).toEqual(before);
+  });
+
+  it("Speed Coffee moves Kasman faster while active", () => {
+    const boosted = createGame(1);
+    runUntil(boosted, () => boosted.phase === "playing");
+    step(boosted, USE_SPEED);
+    expect(boosted.speedTimer).toBeGreaterThan(0);
+    const boostedBefore = boosted.pac.y;
+    step(boosted, UP);
+    const boostedMoved = boostedBefore - boosted.pac.y;
+
+    const base = createGame(1);
+    runUntil(base, () => base.phase === "playing");
+    const baseBefore = base.pac.y;
+    step(base, UP);
+    const baseMoved = baseBefore - base.pac.y;
+
+    expect(boostedMoved).toBeGreaterThan(baseMoved);
+    expect(boostedMoved).toBe(Math.round(baseMoved * SPEED_MULT));
+  });
+
+  it("Ghost Magnet pulls in pellets within its radius but not beyond it", () => {
+    const s = createGame(1);
+    runUntil(s, () => s.phase === "playing");
+    const t = tileOf(s.pac);
+    const near = (t.y - MAGNET_RADIUS) * W + t.x; // just inside radius
+    const far = (t.y - MAGNET_RADIUS - 1) * W + t.x; // just outside radius
+    s.pellets[near] = 1;
+    s.pellets[far] = 1;
+    step(s, USE_MAGNET);
+    expect(s.magnetTimer).toBeGreaterThan(0);
+    expect(s.pellets[near]).toBe(0); // pulled in even though it is not the tile Kasman is on
+    expect(s.pellets[far]).toBe(1); // outside the radius: untouched
+  });
+
+  it("Ghost Magnet also reaches fruit within its radius", () => {
+    const s = createGame(1);
+    runUntil(s, () => s.phase === "playing");
+    const t = tileOf(s.pac);
+    s.fruit = { active: true, x: t.x, y: t.y - MAGNET_RADIUS, timer: 999, spawns: 1 };
+    step(s, USE_MAGNET);
+    expect(s.magnetTimer).toBeGreaterThan(0);
+    expect(s.fruit.active).toBe(false);
+  });
+
+  it("Ghost Hunt frightens every active ghost, same as a power pellet, so Kasman can eat them", () => {
+    const s = createGame(3);
+    runUntil(s, () => s.phase === "playing");
+    step(s, USE_GHOSTHUNT);
+    expect(s.ghosthuntBought).toBe(1);
+    expect(s.frightTimer).toBeGreaterThan(0);
+    // Blinky starts active (not in the house), so it's reliably frightened by this same step;
+    // a ghost released from the house on this exact frame is a pre-existing corner case shared
+    // with power pellets (both frighten before releaseGhosts() runs later in step()).
+    expect(s.ghosts[0].frightened).toBe(true);
+
+    const blinky = s.ghosts[0];
+    blinky.x = s.pac.x + U / 4;
+    blinky.y = s.pac.y;
+    blinky.dir = LEFT;
+    const before = s.score;
+    runUntil(s, () => s.ghosts[0].state === "eaten", 60);
+    expect(s.score - before).toBe(SCORE_GHOST);
+  });
+
+  it("spawns `level` Puzzle Shards from the start, on reachable tiles", () => {
+    const s = createGame(5);
+    expect(s.shards).toHaveLength(1); // level 1
+    expect(s.shards[0].active).toBe(true);
+    const m = mazeFor(1);
+    const tiles = new Set<string>();
+    for (const shard of s.shards) {
+      expect(m.reachable.some((p) => p.x === shard.x && p.y === shard.y)).toBe(true);
+      expect(m.isTunnel(shard.x, shard.y)).toBe(false);
+      expect(shard.x === PAC_START.x && shard.y === PAC_START.y).toBe(false);
+      tiles.add(`${shard.x},${shard.y}`);
+    }
+    expect(tiles.size).toBe(s.shards.length); // distinct tiles, no overlap
+  });
+
+  it("offers 2 Puzzle Shards at level 2, 3 at level 3, and so on", () => {
+    const s = createGame(7);
+    s.pellets.fill(0);
+    s.pelletsLeft = 0;
+    runUntil(s, () => s.level === 2);
+    expect(s.shards).toHaveLength(2);
+    s.pellets.fill(0);
+    s.pelletsLeft = 0;
+    runUntil(s, () => s.level === 3);
+    expect(s.shards).toHaveLength(3);
+  });
+
+  it("collecting a Puzzle Shard marks it and stops it from respawning this level", () => {
+    const s = createGame(5);
+    runUntil(s, () => s.phase === "playing");
+    // Teleport Kasman onto the (only, at level 1) shard's tile; eat() picks it up on the very next step.
+    s.pac.x = s.shards[0].x * U;
+    s.pac.y = s.shards[0].y * U;
+    step(s);
+    expect(s.shards[0].active).toBe(false);
+    expect(s.shards[0].collected).toBe(true);
+    expect(s.shardsCollected).toBe(1);
+    expect(s.events.some((e) => e.type === "shardCollected")).toBe(true);
+
+    // Losing a life re-rolls an uncollected shard, but not once it's already collected.
+    if (s.lives > 1) {
+      loseLife(s);
+      expect(s.shards[0].active).toBe(false);
+    }
+  });
+
+  it("replays Puzzle Shard pickups verbatim", () => {
+    // Whatever shardsCollected ends up being from real (pseudo-random) play, the replay must
+    // reproduce it exactly — teleporting Kasman onto a shard (as the test above does) is not
+    // itself a recorded input, so it wouldn't survive an encode/decode round trip.
+    const { s, replay } = autoplay(5, 30000);
+    const re = simulateReplay(decodeReplay(encodeReplay(replay))!);
+    expect(re.shardsCollected).toBe(s.shardsCollected);
+  });
+
+  it("re-rolls an uncollected Puzzle Shard on every life, not just once", () => {
+    const s = createGame(3);
+    runUntil(s, () => s.phase === "playing");
+    expect(s.shards[0].active).toBe(true);
+    if (s.lives > 1) {
+      // Lose that life without collecting it: the next life still gets its own shard,
+      // so the player isn't stuck with only one chance.
+      loseLife(s);
+      expect(s.shardsCollected).toBe(0);
+      expect(s.shards[0].active).toBe(true);
+    }
   });
 
   it("forgets a buffered turn that cannot be taken soon", () => {

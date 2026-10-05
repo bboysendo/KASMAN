@@ -75,18 +75,18 @@ contract KasmanRewards(
     // Rarity by token id (src/lib/prices.ts RARITIES): multiplier in tenths.
     function multiplier(int tokenId): int {
         int m = 11;
-        if (tokenId > 1500) { m = 13; }
-        if (tokenId > 2400) { m = 16; }
-        if (tokenId > 2850) { m = 20; }
+        if (tokenId > 175) { m = 13; }
+        if (tokenId > 280) { m = 16; }
+        if (tokenId > 325) { m = 20; }
         return m;
     }
 
     // Days between claims: 5 / 3 / 2 / 1.
     function claimWaitDays(int tokenId): int {
         int d = 5;
-        if (tokenId > 1500) { d = 3; }
-        if (tokenId > 2400) { d = 2; }
-        if (tokenId > 2850) { d = 1; }
+        if (tokenId > 175) { d = 3; }
+        if (tokenId > 280) { d = 2; }
+        if (tokenId > 325) { d = 1; }
         return d;
     }
 

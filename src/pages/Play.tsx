@@ -1,17 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import GameCanvas, { type GameResult } from "../components/GameCanvas";
+import GamesGoalProgress from "../components/GamesGoalProgress";
 import Leaderboard from "../components/Leaderboard";
+import PreviousMonthWinners from "../components/PreviousMonthWinners";
+import PrizeDistribution from "../components/PrizeDistribution";
 import PrizePool from "../components/PrizePool";
 import { useLeaderboard } from "../lib/useLeaderboard";
 import SettingsPanel from "../components/SettingsPanel";
 import { MAZE_COUNT } from "../game/engine/map";
 import { encodeReplay, type Replay } from "../game/engine/replay";
 import { onchainReady } from "../lib/chain";
+import { unlockAudio } from "../game/audio";
 import { ENTRY_FEE_KAS, formatRunTime, pay, startGame, submitScore } from "../lib/leaderboard";
 import { getSkin } from "../game/render/skins";
 import { useWallet } from "../lib/useWallet";
 import { useStore } from "../store";
+import XHandleForm from "../components/XHandleForm";
+import XHandleBadge from "../components/XHandleBadge";
 
 type View =
   | { kind: "gate" }
@@ -25,7 +31,7 @@ export default function Play() {
   const [view, setView] = useState<View>(() => {
     const { activeGame: active, activeGameId } = useStore.getState();
     // A run saved by an older engine version would re-simulate differently: drop it.
-    return active?.v === 6 && activeGameId ? { kind: "playing", gameId: activeGameId, seed: active.seed, resume: active } : { kind: "gate" };
+    return active?.v === 15 && activeGameId ? { kind: "playing", gameId: activeGameId, seed: active.seed, resume: active } : { kind: "gate" };
   });
   const [refresh, setRefresh] = useState(0);
   const { entries, pool } = useLeaderboard(Infinity, refresh);
@@ -46,10 +52,11 @@ export default function Play() {
     `rounded-lg px-4 py-2 text-sm ${tab === t ? "bg-kas text-black font-semibold" : "border border-white/15 text-white/70 hover:text-white"}`;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
-      <div role="tablist" aria-label="Play sections" className="mb-4 flex gap-2">
+    <div className="mx-auto max-w-7xl px-4 py-3">
+      <div role="tablist" aria-label="Play sections" className="mb-2 flex items-center gap-2">
         <button type="button" role="tab" aria-selected={tab === "game"} onClick={() => showTab("game")} className={tabClass("game")}>Game</button>
         <button type="button" role="tab" aria-selected={tab === "leaderboard"} onClick={() => showTab("leaderboard")} className={tabClass("leaderboard")}>Leaderboard</button>
+        <XHandleBadge onChanged={() => setRefresh((n) => n + 1)} />
       </div>
 
       {tab === "leaderboard" && (
@@ -59,24 +66,38 @@ export default function Play() {
             <p className="mb-3 text-xs text-white/50">Total points add up every game you submit. Time is your fastest clear of all {MAZE_COUNT} levels.</p>
             <Leaderboard entries={entries} />
           </div>
-          <div><PrizePool pool={pool} /></div>
+          <div className="flex flex-col gap-4">
+            <PrizePool pool={pool} />
+            <GamesGoalProgress />
+            <PrizeDistribution pool={pool} />
+            <PreviousMonthWinners />
+          </div>
         </section>
       )}
 
       {tab === "game" && (
-        <div role="tabpanel" aria-label="Game" className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          <section className="min-w-0">
+        <div
+          role="tabpanel"
+          aria-label="Game"
+          // The maze is the priority: at lg+ (desktop) this panel is capped to exactly what's left
+          // below the header so nothing scrolls, and the game section gets flex-1 so it claims all
+          // of that space the fixed-size sidebar doesn't need. Below lg it's normal scrollable flow.
+          className="flex flex-col gap-2 lg:h-[calc(100dvh_-_var(--header-h,4rem)_-_9rem)] lg:flex-row lg:gap-4 lg:overflow-hidden"
+        >
+          <section className="flex min-h-0 flex-col lg:flex-1">
             {view.kind === "gate" && <Gate onPaid={() => setRefresh((n) => n + 1)} onStart={(gameId, seed) => setView({ kind: "playing", gameId, seed })} />}
             {view.kind === "playing" && (
               <GameCanvas key={view.seed} gameId={view.gameId} seed={view.seed} resume={view.resume} onGameOver={(result) => setView({ kind: "over", gameId: view.gameId, result })} />
             )}
             {view.kind === "replay" && (
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between text-sm">
+              <div className="flex h-full min-h-0 flex-col gap-3">
+                <div className="flex shrink-0 items-center justify-between text-sm">
                   <span className="text-white/60">Replay: {view.title}</span>
                   <button type="button" onClick={() => setView({ kind: "gate" })} className="text-kas hover:underline">Close</button>
                 </div>
-                <GameCanvas seed={view.replay.seed} replay={view.replay} onGameOver={() => {}} />
+                <div className="min-h-0 flex-1">
+                  <GameCanvas seed={view.replay.seed} replay={view.replay} onGameOver={() => {}} />
+                </div>
               </div>
             )}
             {view.kind === "over" && (
@@ -90,9 +111,13 @@ export default function Play() {
             )}
           </section>
 
-          <aside className="flex flex-col gap-4">
-            <PrizePool pool={pool} />
-            <SettingsPanel />
+          {/* Collapsed (the default) this fits with room to spare; overflow-y-auto is only a safety
+           * net for when Settings is expanded, whose full keybinding list is simply too tall to
+           * also fit without scrolling — clipping it off with no way to reach it would be worse. */}
+          <aside className="flex min-w-0 shrink-0 flex-col gap-2 overflow-x-hidden lg:w-64 lg:overflow-y-auto">
+            <PrizePool pool={pool} compact />
+            <PrizeDistribution pool={pool} compact />
+            <SettingsPanel compact />
           </aside>
         </div>
       )}
@@ -104,79 +129,86 @@ function Gate({ onStart, onPaid }: { onStart: (gameId: string, seed: number) => 
   const tickets = useStore((s) => s.tickets);
   const freeGames = useStore((s) => s.freeGames);
   const syncAccount = useStore((s) => s.syncAccount);
-  const playerName = useStore((s) => s.playerName);
-  const setPlayerName = useStore((s) => s.setPlayerName);
+  const xHandle = useStore((s) => s.xHandle);
   const wallet = useWallet();
   const [paying, setPaying] = useState(false);
+  /** True while KasWare is signing/sending the payment, before it's even broadcast: the button
+   * shows this distinctly from on-chain confirmation so the player doesn't click again and queue
+   * up more wallet popups. */
+  const [signing, setSigning] = useState(false);
+  const [waitedMs, setWaitedMs] = useState(0);
   const [error, setError] = useState("");
 
   const buyEntry = async () => {
     if (!wallet.address) return;
+    unlockAudio(); // resume the AudioContext now, tied to this click, so music can start later
+    setPaying(true);
+    setSigning(true);
+    setWaitedMs(0);
+    setError("");
+    try {
+      syncAccount(
+        await pay(wallet.address, "entry", undefined, undefined, (ms) => {
+          setSigning(false); // broadcast went through: now waiting for chain acceptance instead
+          setWaitedMs(ms);
+        }),
+      );
+      onPaid();
+    } catch (e) {
+      console.error("[buyEntry] failed", e);
+      setError(e instanceof Error ? e.message : "Payment failed");
+    } finally {
+      setPaying(false);
+      setSigning(false);
+      setWaitedMs(0);
+    }
+  };
+
+  const startNow = async () => {
+    unlockAudio(); // resume the AudioContext now, tied to this click
     setPaying(true);
     setError("");
     try {
-      syncAccount(await pay(wallet.address, "entry"));
-      onPaid();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Payment failed");
+      const game = await startGame();
+      // Same order as the server: the staked NFT's free games first.
+      useStore.setState((s) => (s.freeGames > 0 ? { freeGames: s.freeGames - 1 } : { tickets: s.tickets - 1 }));
+      onStart(game.gameId, game.seed);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start the game");
     } finally {
       setPaying(false);
     }
   };
 
   return (
-    <div className="flex aspect-[44/31] w-full flex-col items-center justify-center gap-6 rounded-xl border border-kas/30 bg-[radial-gradient(ellipse_at_center,rgba(112,199,186,0.12),transparent_70%)] p-6 text-center">
+    <div className="flex aspect-[44/31] w-full max-h-full flex-col items-center justify-center gap-6 overflow-y-auto rounded-xl border border-kas/30 bg-[radial-gradient(ellipse_at_center,rgba(112,199,186,0.12),transparent_70%)] p-6 text-center">
       <h1 className="font-arcade text-2xl text-yellow-300 sm:text-4xl">KASMAN</h1>
       <p className="max-w-md text-white/70">
-        One entry = one game with 3 lives. Every entry adds {ENTRY_FEE_KAS} KAS to this month&apos;s pool. Highest verified score takes it all.
+        One entry = one game with 3 lives. Every entry adds {ENTRY_FEE_KAS} KAS to this month&apos;s pool. The top 3 verified scores share it.
       </p>
       {!wallet.address ? (
         <button
           type="button"
           disabled={wallet.busy}
-          onClick={wallet.connect}
+          onClick={() => {
+            setError(""); // a previous payment's failure shouldn't linger once reconnecting
+            void wallet.connect();
+          }}
           className="font-arcade rounded-lg bg-kas px-6 py-4 text-sm text-black shadow-[0_0_24px] shadow-kas/60 hover:brightness-110 disabled:opacity-60"
         >
           {wallet.busy ? "CONNECTING..." : "CONNECT WALLET TO PLAY"}
         </button>
+      ) : !xHandle ? (
+        <XHandleForm />
       ) : tickets > 0 || freeGames > 0 ? (
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setPaying(true);
-            setError("");
-            try {
-              const game = await startGame(playerName);
-              // Same order as the server: the staked NFT's free games first.
-              useStore.setState((s) => (s.freeGames > 0 ? { freeGames: s.freeGames - 1 } : { tickets: s.tickets - 1 }));
-              onStart(game.gameId, game.seed);
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "Could not start the game");
-            } finally {
-              setPaying(false);
-            }
-          }}
-          className="flex w-full max-w-sm flex-col items-center gap-3"
+        <button
+          type="button"
+          disabled={paying}
+          onClick={startNow}
+          className="font-arcade rounded-lg bg-kas px-6 py-4 text-sm text-black shadow-[0_0_24px] shadow-kas/60 hover:brightness-110 disabled:opacity-60"
         >
-          <label className="sr-only" htmlFor="player-name">Name</label>
-          <input
-            id="player-name"
-            required
-            autoFocus
-            maxLength={16}
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            placeholder="Your name"
-            className="w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-center"
-          />
-          <button
-            type="submit"
-            disabled={!playerName.trim() || paying}
-            className="font-arcade rounded-lg bg-kas px-6 py-4 text-sm text-black shadow-[0_0_24px] shadow-kas/60 hover:brightness-110 disabled:opacity-60"
-          >
-            START GAME
-          </button>
-        </form>
+          {paying ? "STARTING..." : "START GAME"}
+        </button>
       ) : (
         <button
           type="button"
@@ -184,17 +216,29 @@ function Gate({ onStart, onPaid }: { onStart: (gameId: string, seed: number) => 
           onClick={buyEntry}
           className="font-arcade rounded-lg bg-kas px-6 py-4 text-sm text-black shadow-[0_0_24px] shadow-kas/60 hover:brightness-110 disabled:opacity-60"
         >
-          {paying ? "CONFIRMING..." : `PAY ${ENTRY_FEE_KAS} KAS TO PLAY`}
+          {paying
+            ? signing
+              ? "CONFIRMING IN KASWARE..."
+              : waitedMs > 4000
+                ? `CONFIRMING ON CHAIN... (${Math.round(waitedMs / 1000)}s)`
+                : "CONFIRMING..."
+            : `PAY ${ENTRY_FEE_KAS} KAS TO PLAY`}
         </button>
       )}
       <p className="text-xs text-white/40">
-        {!wallet.address
-          ? "Connect your KasWare wallet: you pay and play with it, and the prize goes to it."
-          : tickets > 0 || freeGames > 0
-            ? [freeGames > 0 && `${freeGames} free game${freeGames === 1 ? "" : "s"} left today`, tickets > 0 && `${tickets} entr${tickets === 1 ? "y" : "ies"} available`]
-                .filter(Boolean)
-                .join(" · ")
-            : "The KAS goes straight from your wallet to this month's prize pool contract. Each day you pay an entry also earns KASMAN."}
+        {paying && signing
+          ? "Unlock KasWare if it asks, then approve the payment in its popup."
+          : paying && waitedMs > 4000
+            ? "Waiting for the network to accept the transaction. This can take a bit longer on testnet; the game starts on its own once it's confirmed, no need to reload."
+            : !wallet.address
+              ? "Connect your KasWare wallet: you pay and play with it, and the prize goes to it."
+              : !xHandle
+                ? "This is the name shown on the leaderboard, linked to your X profile."
+                : tickets > 0 || freeGames > 0
+                  ? [freeGames > 0 && `${freeGames} free game${freeGames === 1 ? "" : "s"} left today`, tickets > 0 && `${tickets} entr${tickets === 1 ? "y" : "ies"} available`]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : "The KAS goes straight from your wallet to this month's prize pool contract. Each day you pay an entry also earns KASMAN."}
       </p>
       {wallet.address && onchainReady && tickets === 0 && freeGames === 0 && (
         <p className="text-xs text-white/40">
@@ -213,7 +257,7 @@ function GameOver({ gameId, result, onSubmitted, onAgain, onReplay }: {
   onAgain: () => void;
   onReplay: () => void;
 }) {
-  const playerName = useStore((s) => s.playerName);
+  const xHandle = useStore((s) => s.xHandle);
   const [status, setStatus] = useState<"saving" | "saved" | "error">("saving");
   const [message, setMessage] = useState("");
   const submitted = useRef(false);
@@ -231,7 +275,7 @@ function GameOver({ gameId, result, onSubmitted, onAgain, onReplay }: {
     }
   };
 
-  // The name was entered before the game: save the result as soon as it ends (once, even under StrictMode).
+  // The X handle was registered before the game: save the result as soon as it ends (once, even under StrictMode).
   useEffect(() => {
     if (submitted.current) return;
     submitted.current = true;
@@ -240,7 +284,7 @@ function GameOver({ gameId, result, onSubmitted, onAgain, onReplay }: {
 
   return (
     <div
-      className={`flex aspect-[44/31] w-full flex-col items-center justify-center gap-5 rounded-xl border p-6 text-center ${
+      className={`flex aspect-[44/31] w-full max-h-full flex-col items-center justify-center gap-5 overflow-y-auto rounded-xl border p-6 text-center ${
         result.won
           ? "border-yellow-300/40 bg-[radial-gradient(ellipse_at_center,rgba(253,224,71,0.14),transparent_70%)]"
           : "border-red-500/30 bg-[radial-gradient(ellipse_at_center,rgba(255,71,87,0.12),transparent_70%)]"
@@ -257,7 +301,11 @@ function GameOver({ gameId, result, onSubmitted, onAgain, onReplay }: {
       <p className="font-arcade text-lg">
         {result.score.toLocaleString()} <span className="text-xs text-white/50">PTS · LEVEL {result.level}</span>
       </p>
-      {status === "saving" && <p className="text-sm text-white/60">Saving score for {playerName.trim() || "Anonymous"}...</p>}
+      {/* Level N offers N Puzzle Shards, so the total offered through the level reached is N(N+1)/2. */}
+      <p className={`text-xs ${result.shardsCollected > 0 ? "text-kas" : "text-white/40"}`}>
+        Puzzle Shards Collected: {result.shardsCollected}/{(result.level * (result.level + 1)) / 2}
+      </p>
+      {status === "saving" && <p className="text-sm text-white/60">Saving score for {xHandle ? `@${xHandle}` : "Anonymous"}...</p>}
       {status === "error" && (
         <button type="button" onClick={submit} className="rounded-lg bg-kas px-4 py-2 font-semibold text-black">Retry</button>
       )}

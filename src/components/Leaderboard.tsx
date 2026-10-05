@@ -25,7 +25,20 @@ export default function Leaderboard({ entries }: Props) {
           {entries.map((e, i) => (
             <tr key={e.address}>
               <td className={`font-arcade py-2 text-xs ${i === 0 ? "text-yellow-300" : "text-white/40"}`}>{i + 1}</td>
-              <td className="min-w-16 max-w-0 truncate py-2">{e.name}</td>
+              <td className="min-w-16 max-w-0 truncate py-2">
+                {e.xHandle ? (
+                  <a
+                    href={`https://x.com/${e.xHandle}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-kas hover:underline"
+                  >
+                    @{e.xHandle}
+                  </a>
+                ) : (
+                  e.name
+                )}
+              </td>
               <td className="font-arcade hidden py-2 pl-3 text-right text-xs text-white/70 sm:table-cell">{e.games}</td>
               <td className="font-arcade py-2 pl-3 text-right text-[10px] sm:text-xs">{e.totalScore.toLocaleString()}</td>
               <td className="font-arcade hidden py-2 pl-3 text-right text-xs text-white/70 sm:table-cell">{e.bestLevel ?? 1}</td>

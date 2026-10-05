@@ -296,9 +296,9 @@ export const ROOT_RECORD: Record = { root: true, owner: new Uint8Array(32), poin
 /** Rarity by token id, as KasmanRewards.sil computes it: multiplier in tenths and claim wait in days. */
 export function rarityRules(tokenId: number | null) {
   if (!tokenId) return { mult: 10, waitDays: 7 };
-  if (tokenId > 2850) return { mult: 20, waitDays: 1 };
-  if (tokenId > 2400) return { mult: 16, waitDays: 2 };
-  if (tokenId > 1500) return { mult: 13, waitDays: 3 };
+  if (tokenId > 325) return { mult: 20, waitDays: 1 };
+  if (tokenId > 280) return { mult: 16, waitDays: 2 };
+  if (tokenId > 175) return { mult: 13, waitDays: 3 };
   return { mult: 11, waitDays: 5 };
 }
 

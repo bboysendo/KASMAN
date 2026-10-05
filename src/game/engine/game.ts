@@ -1,7 +1,10 @@
 import {
-  AMBUSH_RADIUS, AMBUSH_WEIGHT, BONUS_LIFE_STEP, BUY_LIFE, DX, DY, DYING_FRAMES, EATEN_SPEED, FORCE_RELEASE_FRAMES, GHOST_DEFS, GHOST_HOME, LEFT,
-  LEVEL_CLEAR_FRAMES, MAX_BOUGHT_LIVES, MAX_GHOST_CHAIN, MIN_FRUIT_DISTANCE, NONE, PAC_START, READY_FRAMES, SCORE_GHOST, SCORE_PELLET,
-  SCORE_POWER, STARTING_LIVES, TURN_BUFFER_FRAMES, TURN_TOLERANCE, U, UP, elroyThresholds, fruitForLevel, levelTuning, modeSchedule, opposite,
+  AMBUSH_RADIUS, AMBUSH_WEIGHT, BONUS_LIFE_STEP, BUY_LIFE, DX, DY, DYING_FRAMES, EATEN_SPEED, FORCE_RELEASE_FRAMES, FREEZE_FRAMES, GHOSTHUNT_FRAMES,
+  GHOST_DEFS, GHOST_HOME, LEFT, LEVEL_CLEAR_FRAMES, MAGNET_FRAMES, MAGNET_RADIUS, MAX_BOUGHT_LIVES, MAX_FREEZE_PER_LEVEL, MAX_GHOSTHUNT_PER_LEVEL,
+  MAX_GHOST_CHAIN, MAX_MAGNET_PER_LEVEL, MAX_SHIELD_PER_LEVEL, MAX_SPEED_PER_LEVEL, MAX_SURGE_PER_LEVEL, MIN_FRUIT_DISTANCE, NONE, PAC_START, READY_FRAMES,
+  SCORE_GHOST, SCORE_PELLET, SCORE_POWER, SHIELD_FRAMES, SPEED_FRAMES, SPEED_MULT, STARTING_LIVES, SURGE_FRAMES, SURGE_MULT, TURN_BUFFER_FRAMES,
+  TURN_TOLERANCE, U, UP, USE_FREEZE, USE_GHOSTHUNT, USE_MAGNET, USE_SHIELD, USE_SPEED, USE_SURGE,
+  elroyThresholds, fruitForLevel, levelTuning, modeSchedule, opposite,
   type GhostId, type LevelTuning, type Point,
 } from "./constants";
 import { H, MAZE_COUNT, POWER, W, mazeFor, wrapX } from "./map";
@@ -18,8 +21,9 @@ export interface Ghost extends Actor {
 }
 
 export type GameEvent =
-  | { type: "pellet" | "power" | "death" | "levelClear" | "extraLife" | "gameOver" | "ready" }
-  | { type: "ghostEaten" | "fruit"; x: number; y: number; points: number };
+  | { type: "pellet" | "power" | "death" | "levelClear" | "extraLife" | "gameOver" | "ready" | "shield" | "freeze" | "surge" | "speed" | "magnet" | "ghosthunt" }
+  | { type: "ghostEaten" | "fruit"; x: number; y: number; points: number }
+  | { type: "shardCollected"; x: number; y: number };
 
 export interface GameState {
   seed: number;
@@ -32,7 +36,22 @@ export interface GameState {
   won: boolean;
   score: number;
   lives: number;
+  /** Life number since game start (1 for the first life), incremented on death, not on level-clear. */
+  life: number;
   livesBought: number;
+  /** Potions used this level (each capped independently of how many are owned); reset to 0 in `resetLevel` on every level clear. */
+  shieldBought: number;
+  freezeBought: number;
+  surgeBought: number;
+  speedBought: number;
+  magnetBought: number;
+  ghosthuntBought: number;
+  /** Frames left on the active effect, 0 when off. */
+  shieldTimer: number;
+  freezeTimer: number;
+  surgeTimer: number;
+  speedTimer: number;
+  magnetTimer: number;
   nextBonus: number;
   pellets: Uint8Array;
   pelletsLeft: number;
@@ -47,6 +66,14 @@ export interface GameState {
   pac: Pacman;
   ghosts: Ghost[];
   fruit: { active: boolean; x: number; y: number; timer: number; spawns: number };
+  /**
+   * This level's Puzzle Shard pickups: `level` of them (level 1 has 1, level 2 has 2, ...), each
+   * independently collected (`spawnShards`). A fresh set is created every time the level changes;
+   * within a level, still-uncollected ones are re-rolled onto a new reachable tile every round.
+   */
+  shards: { active: boolean; collected: boolean; x: number; y: number }[];
+  /** Total Puzzle Shards collected so far this game, across every level. The server credits that many on submit. */
+  shardsCollected: number;
   events: GameEvent[];
 }
 
@@ -78,7 +105,19 @@ export function createGame(seed: number): GameState {
     won: false,
     score: 0,
     lives: STARTING_LIVES,
+    life: 1,
     livesBought: 0,
+    shieldBought: 0,
+    freezeBought: 0,
+    surgeBought: 0,
+    speedBought: 0,
+    magnetBought: 0,
+    ghosthuntBought: 0,
+    shieldTimer: 0,
+    freezeTimer: 0,
+    surgeTimer: 0,
+    speedTimer: 0,
+    magnetTimer: 0,
     nextBonus: BONUS_LIFE_STEP,
     pellets: new Uint8Array(0),
     pelletsLeft: 0,
@@ -93,6 +132,8 @@ export function createGame(seed: number): GameState {
     pac: { x: 0, y: 0, dir: LEFT, next: NONE, nextTtl: 0, moving: false },
     ghosts: [],
     fruit: { active: false, x: 0, y: 0, timer: 0, spawns: 0 },
+    shards: [],
+    shardsCollected: 0,
     events: [],
   };
   resetLevel(s);
@@ -103,10 +144,36 @@ function resetLevel(s: GameState) {
   s.pellets = maze(s).createPellets();
   s.pelletsTotal = s.pellets.reduce((n, p) => n + (p ? 1 : 0), 0);
   s.pelletsLeft = s.pelletsTotal;
+  // Each potion's per-level cap renews on a new level; bought lives stay capped for the whole game.
+  s.shieldBought = 0;
+  s.freezeBought = 0;
+  s.surgeBought = 0;
+  s.speedBought = 0;
+  s.magnetBought = 0;
+  s.ghosthuntBought = 0;
+  // A fresh set of Puzzle Shards for this level: 1 at level 1, 2 at level 2, and so on.
+  s.shards = Array.from({ length: s.level }, () => ({ active: false, collected: false, x: 0, y: 0 }));
   resetRound(s);
 }
 
+/** Re-rolls every uncollected shard in `s.shards` onto its own reachable tile, leaving collected ones alone. */
+function spawnShards(s: GameState) {
+  const m = maze(s);
+  const pool = m.reachable.filter((p) => !m.isTunnel(p.x, p.y) && !(p.x === PAC_START.x && p.y === PAC_START.y));
+  for (const shard of s.shards) {
+    if (shard.collected || pool.length === 0) {
+      shard.active = false;
+      continue;
+    }
+    const spot = pool.splice(randInt(s, pool.length), 1)[0];
+    shard.active = true;
+    shard.x = spot.x;
+    shard.y = spot.y;
+  }
+}
+
 function resetRound(s: GameState) {
+  spawnShards(s);
   s.pac = { x: PAC_START.x * U, y: PAC_START.y * U, dir: LEFT, next: NONE, nextTtl: 0, moving: false };
   s.ghosts = GHOST_DEFS.map((d) => ({
     id: d.id,
@@ -175,7 +242,8 @@ function movePacman(s: GameState) {
       p.y = t.y * U;
     }
   }
-  p.moving = advance(p, tuning(s).pacSpeed, (tx, ty) => {
+  const speed = s.speedTimer > 0 ? Math.round(tuning(s).pacSpeed * SPEED_MULT) : tuning(s).pacSpeed;
+  p.moving = advance(p, speed, (tx, ty) => {
     if (p.next !== NONE && isOpen(tx + DX[p.next], ty + DY[p.next])) {
       const d = p.next;
       p.next = NONE;
@@ -315,7 +383,8 @@ function moveGhost(s: GameState, g: Ghost) {
 }
 
 function addScore(s: GameState, points: number) {
-  s.score += points;
+  // Score Surge doubles everything Kasman eats while active.
+  s.score += s.surgeTimer > 0 ? points * SURGE_MULT : points;
   while (s.score >= s.nextBonus) {
     s.lives++;
     s.nextBonus += BONUS_LIFE_STEP;
@@ -354,9 +423,7 @@ function releaseGhosts(s: GameState) {
   }
 }
 
-function eat(s: GameState) {
-  const t = tileOf(s.pac);
-  const i = t.y * W + t.x;
+function consumePelletAt(s: GameState, i: number) {
   const p = s.pellets[i];
   if (!p) return;
   s.pellets[i] = 0;
@@ -378,11 +445,42 @@ function eat(s: GameState) {
   }
 }
 
+/** Ghost Magnet: also pulls in every pellet within MAGNET_RADIUS tiles of Kasman. */
+function magnetPull(s: GameState, t: Point) {
+  for (let dy = -MAGNET_RADIUS; dy <= MAGNET_RADIUS; dy++) {
+    const y = t.y + dy;
+    if (y < 0 || y >= H) continue;
+    for (let dx = -MAGNET_RADIUS; dx <= MAGNET_RADIUS; dx++) {
+      if (dx === 0 && dy === 0) continue; // the tile Kasman is on is handled by eat() itself
+      consumePelletAt(s, y * W + wrapX(t.x + dx));
+    }
+  }
+}
+
+function checkShard(s: GameState, t: Point) {
+  for (const shard of s.shards) {
+    if (!shard.active || t.x !== shard.x || t.y !== shard.y) continue;
+    shard.active = false;
+    shard.collected = true;
+    s.shardsCollected++;
+    s.events.push({ type: "shardCollected", x: t.x, y: t.y });
+  }
+}
+
+function eat(s: GameState) {
+  const t = tileOf(s.pac);
+  consumePelletAt(s, t.y * W + t.x);
+  checkShard(s, t);
+  if (s.magnetTimer > 0) magnetPull(s, t);
+}
+
 function updateFruit(s: GameState) {
   const f = s.fruit;
   const t = tuning(s);
   const pt = tileOf(s.pac);
-  if (f.active && pt.x === f.x && pt.y === f.y) {
+  // Ghost Magnet also reaches the fruit, not just pac-dots.
+  const reach = s.magnetTimer > 0 ? MAGNET_RADIUS : 0;
+  if (f.active && Math.max(Math.abs(pt.x - f.x), Math.abs(pt.y - f.y)) <= reach) {
     const points = fruitForLevel(s.level).points;
     addScore(s, points);
     s.events.push({ type: "fruit", x: f.x, y: f.y, points });
@@ -421,6 +519,8 @@ function checkCollisions(s: GameState, pacBefore: Point, ghostsBefore: Point[]) 
       g.state = "eaten";
       g.frightened = false;
       s.events.push({ type: "ghostEaten", x: gt.x, y: gt.y, points });
+    } else if (s.shieldTimer > 0) {
+      continue; // Ghost Shield: passes through unharmed
     } else {
       s.lives--;
       s.phase = "dying";
@@ -431,7 +531,7 @@ function checkCollisions(s: GameState, pacBefore: Point, ghostsBefore: Point[]) 
   }
 }
 
-/** Advances the simulation one frame. `input` is a newly pressed direction, BUY_LIFE or NONE. */
+/** Advances the simulation one frame. `input` is a newly pressed direction, a special input (BUY_LIFE, USE_SHIELD, USE_FREEZE, USE_SURGE, USE_SPEED, USE_MAGNET, USE_GHOSTHUNT) or NONE. */
 export function step(s: GameState, input: number = NONE) {
   s.events.length = 0;
   if (s.phase === "gameover") return;
@@ -442,6 +542,50 @@ export function step(s: GameState, input: number = NONE) {
       s.livesBought++;
       s.lives++;
       s.events.push({ type: "extraLife" });
+    }
+  } else if (input === USE_SHIELD) {
+    if (s.phase === "playing" && s.shieldBought < MAX_SHIELD_PER_LEVEL) {
+      s.shieldBought++;
+      s.shieldTimer = SHIELD_FRAMES;
+      s.events.push({ type: "shield" });
+    }
+  } else if (input === USE_FREEZE) {
+    if (s.phase === "playing" && s.freezeBought < MAX_FREEZE_PER_LEVEL) {
+      s.freezeBought++;
+      s.freezeTimer = FREEZE_FRAMES;
+      s.events.push({ type: "freeze" });
+    }
+  } else if (input === USE_SURGE) {
+    if (s.phase === "playing" && s.surgeBought < MAX_SURGE_PER_LEVEL) {
+      s.surgeBought++;
+      s.surgeTimer = SURGE_FRAMES;
+      s.events.push({ type: "surge" });
+    }
+  } else if (input === USE_SPEED) {
+    if (s.phase === "playing" && s.speedBought < MAX_SPEED_PER_LEVEL) {
+      s.speedBought++;
+      s.speedTimer = SPEED_FRAMES;
+      s.events.push({ type: "speed" });
+    }
+  } else if (input === USE_MAGNET) {
+    if (s.phase === "playing" && s.magnetBought < MAX_MAGNET_PER_LEVEL) {
+      s.magnetBought++;
+      s.magnetTimer = MAGNET_FRAMES;
+      s.events.push({ type: "magnet" });
+    }
+  } else if (input === USE_GHOSTHUNT) {
+    if (s.phase === "playing" && s.ghosthuntBought < MAX_GHOSTHUNT_PER_LEVEL) {
+      s.ghosthuntBought++;
+      // Same frightened state a power pellet triggers (blue, eatable, same chain scoring),
+      // just a fixed 6s instead of the level-tuned frightFrames, and no points for using it.
+      s.frightTimer = GHOSTHUNT_FRAMES;
+      s.eatChain = 0;
+      for (const g of s.ghosts) {
+        if (g.state !== "active") continue;
+        g.frightened = true;
+        g.dir = opposite(g.dir);
+      }
+      s.events.push({ type: "ghosthunt" });
     }
   } else if (input !== NONE) {
     s.pac.next = input;
@@ -455,7 +599,10 @@ export function step(s: GameState, input: number = NONE) {
       if (s.lives <= 0) {
         s.phase = "gameover";
         s.events.push({ type: "gameOver" });
-      } else resetRound(s);
+      } else {
+        s.life++;
+        resetRound(s);
+      }
     } else if (s.phase === "levelclear") {
       if (s.level >= MAZE_COUNT) {
         s.won = true;
@@ -472,13 +619,19 @@ export function step(s: GameState, input: number = NONE) {
   s.roundFrame++;
   const pacBefore = tileOf(s.pac);
   const ghostsBefore = s.ghosts.map(tileOf);
+  const frozen = s.freezeTimer > 0;
+  if (s.freezeTimer > 0) s.freezeTimer--;
+  if (s.shieldTimer > 0) s.shieldTimer--;
+  if (s.surgeTimer > 0) s.surgeTimer--;
+  if (s.speedTimer > 0) s.speedTimer--;
+  if (s.magnetTimer > 0) s.magnetTimer--;
 
   movePacman(s);
   eat(s);
   updateModes(s);
   releaseGhosts(s);
   updateFruit(s);
-  for (const g of s.ghosts) moveGhost(s, g);
+  if (!frozen) for (const g of s.ghosts) moveGhost(s, g);
   checkCollisions(s, pacBefore, ghostsBefore);
 
   if (s.phase === "playing" && s.pelletsLeft === 0) {

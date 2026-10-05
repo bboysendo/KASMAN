@@ -116,11 +116,34 @@ pnpm exec wrangler d1 create kasman
 
 Copia el `database_id` que devuelve y pégalo en `wrangler.jsonc` (sustituye el `00000000-...`).
 
-Crear las tablas en producción:
+Crear las tablas en una base **nueva**:
 
 ```bash
 pnpm exec wrangler d1 execute kasman --remote --file worker/schema.sql
 ```
+
+#### Migraciones en una base que ya existe
+
+`schema.sql` solo crea tablas que faltan; no añade columnas a tablas existentes. Si la base ya estaba desplegada, sigue este flujo antes de `wrangler deploy`:
+
+1. Comprueba las columnas (solo lectura):
+
+   ```bash
+   pnpm exec wrangler d1 execute kasman --remote --command "PRAGMA table_info(players);"
+   pnpm exec wrangler d1 execute kasman --remote --command "PRAGMA table_info(orders);"
+   ```
+
+2. Si `players` no tiene `x_handle` o `orders` no tiene `qty`, aplica `worker/migrations/0001_x_handle_qty_quests.sql` con:
+
+   ```bash
+   pnpm exec wrangler d1 execute kasman --remote --file worker/migrations/0001_x_handle_qty_quests.sql
+   ```
+
+   Si una columna ya existe, su `ALTER TABLE` falla con `duplicate column name` y D1 se detiene ahí. Comenta ese `ALTER` en el archivo y vuelve a ejecutarlo: las sentencias `IF NOT EXISTS` (índice `idx_players_x_handle`, índice `orders_month_kind`, tabla `quest_claims`) son idempotentes y se pueden ejecutar siempre.
+
+3. Solo después, `pnpm build` y `pnpm exec wrangler deploy`. Desplegar el Worker antes de la migración rompe las partidas, compras y Quests.
+
+Nunca ejecutes `DROP TABLE` sobre datos de producción. `schema.sql` todavía contiene `DROP TABLE IF EXISTS stakes` y `rewards`, tablas antiguas reemplazadas por los contratos; no las ejecutes contra una base con datos sin revisarlo antes.
 
 ### 5.3. Configuración (`wrangler.jsonc`)
 
@@ -165,6 +188,9 @@ pnpm dev                                   # http://localhost:5173 (web + API + 
 - `pnpm dev` ejecuta el Worker real (workerd) con D1 y Durable Object locales.
 - La tabla `free_games` se crea volviendo a ejecutar `schema.sql` (local y `--remote`). El mismo archivo borra las tablas provisionales `stakes` y `rewards` si existen (las recompensas ya son on-chain).
 - **El esquema no tiene migraciones.** `schema.sql` usa `CREATE TABLE IF NOT EXISTS`: si cambias una tabla que ya existe, hay que borrarla y recrearla (en local) o escribir un `ALTER TABLE` (en producción, sin perder datos).
+- La columna `x_handle` en `players` (usuario de X único por wallet, case-insensitive) y la tabla `quest_claims` (Social Quests) son nuevas: sobre una base ya creada (local o remota) hace falta `ALTER TABLE players ADD COLUMN x_handle TEXT;` antes de volver a ejecutar `schema.sql` (que añade el índice único y crea `quest_claims`).
+- La columna `qty` en `orders` (cantidad comprada; solo las pociones piden más de 1) también es nueva: sobre una base ya creada hace falta `ALTER TABLE orders ADD COLUMN qty INTEGER NOT NULL DEFAULT 1;`.
+- El índice `orders_month_kind` (cuenta de partidas pagadas por mes, usado por `/api/pool` y el objetivo de 300 partidas del Leaderboard) se crea solo con `CREATE INDEX IF NOT EXISTS`: basta con volver a ejecutar `schema.sql`, sin `ALTER TABLE`.
 
 Comprobaciones antes de cada cambio:
 
@@ -185,7 +211,7 @@ El pago es **manual**: tú decides cuándo. El contrato no bloquea el dinero has
    curl https://<tu-dominio>/api/month/2026-10/settlement > settlement.json
    ```
 
-   Contiene `winner` (dirección del nº 1), `root` (huella SHA-256 del ranking) y `rollover` (`true` si nadie jugó: el ganador es entonces la dirección del bote del mes siguiente).
+   Contiene `winner` (dirección del nº 1), `root` (huella SHA-256 del ranking), `paidGames`/`gamesGoal` (entradas de 1 KAS pagadas este mes frente al objetivo de `GAMES_GOAL`, `src/lib/prices.ts`, hoy 300) y `rollover` (`true` si nadie jugó **o** si el mes no llegó a `gamesGoal`: el ganador es entonces la dirección del bote del mes siguiente). El objetivo de partidas es solo informativo — no bloquea nada en el contrato — pero el Leaderboard lo muestra como "LOCKED/UNLOCKED" para orientar la decisión.
 
 2. Revisa el ranking (`/api/month/2026-10/export`) antes de pagar. Es la única oportunidad de detectar algo raro.
 
@@ -230,7 +256,7 @@ Cada mes puede llevar tokens extra además del KAS. Se configuran en `src/lib/bo
 | Token | KasMan · `KASMAN` · **7 decimales** |
 | Suministro máximo | 100.000.000.000 KASMAN |
 | Recompensas | **1.000 KASMAN × multiplicador** por cada día registrado on-chain (cualquier jugador, tenga NFT o no) |
-| NFTs | 3.000; venta en el Marketplace a **50 KAS** (`NFT_PRICE_KAS`) |
+| NFTs | 350; minteo externo en KaspaCom a **50 KAS** (`NFT_PRICE_KAS`) |
 | Destino del mint | Contrato `Treasury` (tu clave retira cuando quiera) |
 | Reventa | En el contrato (`list`/`buy`/`cancel`): 95 % al vendedor, 5 % de royalty al Treasury. Sin botones en la web todavía |
 | Arte | Vacío por ahora |
@@ -239,17 +265,17 @@ Rareza por número de NFT y ventajas del NFT **stakeado** (modo LOCKED de `Kasma
 
 | Rareza | NFT # | Partidas gratis/día | Multiplicador | Retiro cada |
 |---|---|---|---|---|
-| Sin NFT | - | 0 (paga la entrada de 10 KAS) | 1.0x | 7 días |
-| Común | 1-1500 | 1 | 1.1x | 5 días |
-| Raro | 1501-2400 | 2 | 1.3x | 3 días |
-| Épico | 2401-2850 | 3 | 1.6x | 48 h |
-| Legendario | 2851-3000 | 4 | 2.0x | 24 h |
+| Sin NFT | - | 0 (paga la entrada de 1 KAS) | 1.0x | 7 días |
+| Común | 1-175 | 1 | 1.1x | 5 días |
+| Raro | 176-280 | 2 | 1.3x | 3 días |
+| Épico | 281-325 | 3 | 1.6x | 48 h |
+| Legendario | 326-350 | 4 | 2.0x | 24 h |
 
 ### 8.2. Cómo funcionan las recompensas (todo on-chain)
 
 Kaspa no tiene almacenamiento global: los datos de un contrato viven en UTXOs. `KasmanRewards` es **un solo contrato (un covenant ID) con una "ficha" (UTXO) por jugador**. Nadie puede falsificar fichas, porque todas llevan el mismo covenant ID. Ni el Worker ni ninguna clave tuya intervienen en el registro ni en el pago.
 
-- **Pagar una entrada registra el día.** El pago de 10 KAS a un `KasmanPool` va en la misma transacción que la ficha. El contrato reconstruye la dirección del bote a partir del mes, así que no se puede pagar a otro sitio.
+- **Pagar una entrada registra el día.** El pago de 1 KAS a un `KasmanPool` va en la misma transacción que la ficha. El contrato reconstruye la dirección del bote a partir del mes, así que no se puede pagar a otro sitio.
   - El primer pago crea la ficha (`open`, desde la raíz): día 1 a 1.0x.
   - Después, `play` suma el día (10 puntos) si la ficha lleva al menos 24 h sin cambiar.
   - Un segundo pago dentro de las 24 h se hace sin la ficha: vale como entrada, pero no suma día.
@@ -262,7 +288,7 @@ Kaspa no tiene almacenamiento global: los datos de un contrato viven en UTXOs. `
   - La transacción no puede minarse antes del DAA que declara (`tx.daa`).
 - **La clave admin de `DailyMinter`** solo sirve para su `init`. Después no puede acuñar.
 - "Día" = 24 h (en DAA) desde la última vez que se tocó la ficha, no un día de calendario. Si se reclama, hay que esperar 24 h para que cuente el siguiente día.
-- Cada ficha cuenta un día por entrada pagada. Si alguien abre varias fichas, gana un día por cada entrada de 10 KAS que pague, y todo ese KAS va al bote.
+- Cada ficha cuenta un día por entrada pagada. Si alguien abre varias fichas, gana un día por cada entrada de 1 KAS que pague, y todo ese KAS va al bote.
 - On-chain, "jugar" = pagar una entrada o hacer check-in. La cadena no sabe si la partida se terminó.
 
 ### 8.3. Lanzar los contratos (una vez por red)
@@ -335,10 +361,10 @@ Nadie tiene que hacer nada en el servidor. Cada acción es una transacción que 
 
 | Acción (dónde) | Qué hace en la cadena |
 |---|---|
-| Pagar entrada (Play) | 10 KAS al bote del mes. Si hace ≥ 24 h del último día contado, la ficha suma el día. La primera vez crea la ficha (2 KAS de depósito). |
-| Mint (Marketplace → NFT) | 50 KAS al Treasury. La raíz de la colección entrega el siguiente número (la rareza la da el número). |
-| Stake / Unstake (Inventory → NFT) | El NFT pasa a LOCKED / FREE. Stakeado no se puede vender ni transferir. |
-| Daily check-in (Inventory → NFT) | La ficha suma el día con el multiplicador del NFT (una vez cada 24 h). Después la web pide al Worker las partidas gratis de hoy. |
+| Pagar entrada (Play) | 1 KAS al bote del mes. Si hace ≥ 24 h del último día contado, la ficha suma el día. La primera vez crea la ficha (2 KAS de depósito). |
+| Mint (Staking) | 50 KAS al Treasury. La raíz de la colección entrega el siguiente número (la rareza la da el número). |
+| Stake / Unstake (Staking) | El NFT pasa a LOCKED / FREE. Stakeado no se puede vender ni transferir. |
+| Daily check-in (Staking) | La ficha suma el día con el multiplicador del NFT (una vez cada 24 h). Después la web pide al Worker las partidas gratis de hoy. |
 | Claim (Inventory → Rewards) | `DailyMinter` acuña puntos × 100 KASMAN a la wallet y deja la ficha a 0. La espera depende del NFT stakeado. |
 
 La web encuentra las fichas y NFT de cada jugador leyendo el historial de su dirección (API REST) y compara cada estado con la dirección real del contrato. Envía por un nodo público con el SDK (`vendor/kaspa`, se descarga la primera vez).
@@ -354,15 +380,20 @@ cd ../..
 node scripts/broadcast.mjs contracts/tool/treasury-txs.json testnet-10
 ```
 
+Dirección de retiro en testnet (wallet de recaudo del Treasury, no del Prize Pool):
+`kaspatest:qrtfmlgmpa4k7el9xmuu9m477h24y24gpwxfhpg40rdxpmeuqy6ecg5q4nn33`
+
 La herramienta junta todos los UTXOs del Treasury (30 por transacción), firma, verifica cada entrada con el motor de scripts y escribe `treasury-txs.json`. La comisión sale del importe.
+
+Esta dirección no vive en `.dev.vars` ni en config del Worker: el Worker nunca la toca (no tiene claves ni mueve fondos), el retiro es siempre manual con `TREASURY_KEY` desde tu máquina, como el `<dirección destino>` de arriba.
 
 ### 8.6. Probar en testnet
 
 Tu KasWare de testnet necesita unos **100 KAS**: entrada 10, depósito de la ficha 2, NFT 50 + depósito 2, depósito de cada claim 2, y comisiones de ~0,05-0,1 KAS por transacción.
 
-- [ ] **Play → PAY 10 KAS**: KasWare pide firmar. La transacción paga el bote y crea tu ficha (día 1). **Inventory → Rewards** muestra 1.000 KASMAN por reclamar.
-- [ ] **Marketplace → NFT → Mint**: 50 KAS al Treasury. Tu NFT aparece en **Inventory → NFT**.
-- [ ] **Stake**: el NFT pasa a "Staked". A las 24 h, **Daily check-in** suma el día con su multiplicador y da las partidas gratis de hoy (Play las muestra).
+- [ ] **Play → PAY 1 KAS**: KasWare pide firmar. La transacción paga el bote y crea tu ficha (día 1). **Inventory → Rewards** muestra 1.000 KASMAN por reclamar.
+- [ ] **Staking → Mint**: 50 KAS al Treasury. Tu NFT aparece en **Staking → Your NFTs**.
+- [ ] **Staking → Stake**: el NFT pasa a "Staked". A las 24 h, **Daily check-in** suma el día con su multiplicador y da las partidas gratis de hoy (Play las muestra).
 - [ ] **Claim** (tras la espera de tu rareza): el contrato acuña los KASMAN a tu wallet. "KASMAN received" sube.
 - [ ] **Unstake**: el NFT vuelve a "Not staked".
 
@@ -405,6 +436,14 @@ Si algo falla, el mensaje de la web o de KasWare dice el motivo. Las transaccion
 
 El proyecto **ya viene configurado para testnet-10**: `worker/pools.json` es de testnet (clave del oráculo de prueba en `.secrets/oracle-testnet.env`) y `KASPA_API` apunta a `https://api-tn10.kaspa.org`. Los pagos de testnet son reales en la red de pruebas, pero el KAS de prueba no vale nada.
 
+**Si `api-tn10.kaspa.org` no indexa las transacciones** (el pago llega on-chain y el balance del pool sube, pero `/api/pay` se queda reintentando para siempre porque `GET /transactions/{txId}` devuelve "not found" aunque la tx tenga confirmaciones de sobra): es un problema del indexador público, no del código. Para seguir probando el resto del flujo (partida, canvas, leaderboard) en local mientras se resuelve, crea un `.dev.vars` (no se sube al repo) con:
+
+```
+DEV_SKIP_TX_VERIFICATION=true
+```
+
+Esto hace que `verifyPayment` (`worker/index.ts`) acepte cualquier pago sin comprobarlo en cadena — **solo funciona con `wrangler dev` / `pnpm dev` local**, `.dev.vars` nunca se lee en `wrangler deploy`. No lo pongas nunca en `wrangler.jsonc` ni en las variables/secrets de un Worker desplegado: anularía la única prueba de que una entrada, vida o skin se pagó de verdad. Bórralo o ponlo en `false` en cuanto el indexador público vuelva a funcionar.
+
 Hay dos formas de probar: **en tu ordenador** (recomendado primero; no necesitas Cloudflare) o **desplegado en Cloudflare**.
 
 ### 9.1. Preparar KasWare
@@ -426,9 +465,9 @@ Abre `http://localhost:5173`. La web, la API, la base de datos y el verificador 
 Recorrido de prueba (marca cada punto):
 
 - [ ] **Connect wallet** (arriba a la derecha): KasWare pide firmar un mensaje. Después se ve tu dirección corta.
-- [ ] **Marketplace → Lives**: compra 3 vidas (10 KAS). KasWare pide aprobar el pago. Tras unos segundos, el inventario muestra 3 vidas.
-- [ ] **Marketplace → Skins**: compra una skin (50 KAS) y equípala.
-- [ ] **Play**: paga una entrada (10 KAS), escribe tu nombre y juega. Usa alguna vida con **+1 LIFE**.
+- [ ] **Shop → Potions**: compra 2 Ghost Shield (0,6 KAS con el selector de cantidad). KasWare pide aprobar el pago. Tras unos segundos, el inventario muestra 2.
+- [ ] **Shop → Skins**: compra una skin (3 KAS) y equípala.
+- [ ] **Play**: registra tu usuario de X la primera vez (una sola vez por wallet), paga una entrada (1 KAS) y juega.
 - [ ] Al terminar: "Score verified and added to your monthly total." y la partida aparece en **Leaderboard**.
 - [ ] **Prize Pool** muestra el KAS acumulado (puede tardar hasta un minuto).
 - [ ] Comprueba el saldo del bote en la cadena:
@@ -512,6 +551,7 @@ Para pasar después a mainnet, usa una **base de datos D1 nueva** (no mezcles ju
 - [ ] Clave del oráculo **nueva**, generada y guardada fuera del repositorio, con copia de seguridad.
 - [ ] `worker/pools.json` regenerado con `mainnet` y la clave pública nueva.
 - [ ] `KASPA_API` = `https://api.kaspa.org` en `wrangler.jsonc`.
+- [ ] `DEV_SKIP_TX_VERIFICATION` no existe en `wrangler.jsonc` ni en los secrets del Worker desplegado (solo debe vivir en tu `.dev.vars` local; ver sección 9).
 - [ ] Base de datos D1 de producción creada y con el esquema aplicado.
 - [ ] Dominio propio asignado.
 - [ ] Pruebas completas en testnet: pago de entrada, vidas, skin, partida, ranking y **un payout real**.

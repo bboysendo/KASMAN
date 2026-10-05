@@ -26,11 +26,11 @@ pub const MAX_TOKEN_SUPPLY: i64 = 100_000_000_000 * TOKEN_UNIT;
 pub const TOKENS_PER_DAY: i64 = 1_000 * TOKEN_UNIT;
 pub const TOKENS_PER_POINT: i64 = TOKENS_PER_DAY / 10;
 /// Entry fee (src/lib/prices.ts ENTRY_FEE_KAS).
-pub const ENTRY_PRICE: i64 = 10 * SOMPI_PER_KAS;
+pub const ENTRY_PRICE: i64 = SOMPI_PER_KAS;
 /// 10 blocks per second.
 pub const DAA_PER_DAY: i64 = 864_000;
 pub const MINT_PRICE: i64 = 50 * SOMPI_PER_KAS;
-pub const MAX_NFTS: i64 = 3_000;
+pub const MAX_NFTS: i64 = 350;
 /// Token covenant fan-in/fan-out bounds baked into KCC20.
 pub const KCC20_MAX_INS: i64 = 2;
 pub const KCC20_MAX_OUTS: i64 = 2;
@@ -790,7 +790,7 @@ mod tests {
         let prev = existing(&l, rec, l.covid);
         let bad = |tx: Tx, why: &str| assert!(tx.run_all().is_err_and(|e| by_script(&e)), "{why}");
 
-        let (legendary_prev, legendary) = staked(&w, 2_900, alice, w.nft_covid);
+        let (legendary_prev, legendary) = staked(&w, 340, alice, w.nft_covid);
         checkin_tx(&w, &l, &prev, rec, &legendary_prev, legendary, 20, DAY, DAY, &w.alice).run_all().expect("legendary day = 2.0x");
         let (common_prev, common) = staked(&w, 7, alice, w.nft_covid);
         checkin_tx(&w, &l, &prev, rec, &common_prev, common, 11, DAY, DAY, &w.alice).run_all().expect("common day = 1.1x");
@@ -798,12 +798,12 @@ mod tests {
         bad(checkin_tx(&w, &l, &prev, rec, &legendary_prev, legendary, 21, DAY, DAY, &w.alice), "more points than the rarity gives");
         bad(checkin_tx(&w, &l, &prev, rec, &legendary_prev, legendary, 20, DAY - 1, DAY, &w.alice), "record counted twice within 24 h");
         bad(checkin_tx(&w, &l, &prev, rec, &legendary_prev, legendary, 20, DAY, DAY - 1, &w.alice), "NFT used twice within 24 h");
-        let (bobs_prev, bobs) = staked(&w, 2_900, xonly(&w.bob), w.nft_covid);
+        let (bobs_prev, bobs) = staked(&w, 340, xonly(&w.bob), w.nft_covid);
         bad(checkin_tx(&w, &l, &prev, rec, &bobs_prev, bobs, 20, DAY, DAY, &w.alice), "someone else's NFT");
-        let free = nft(2_900, alice, FREE, 0);
+        let free = nft(340, alice, FREE, 0);
         let free_prev = Tx::new(vec![], vec![covenant_output(&w.collection.compile(free).unwrap(), 1_000, 0, w.nft_covid)], vec![]);
         bad(checkin_tx(&w, &l, &prev, rec, &free_prev, free, 20, DAY, DAY, &w.alice), "NFT not staked");
-        let (fake_prev, fake) = staked(&w, 2_900, alice, Hash::from_bytes([5; 32]));
+        let (fake_prev, fake) = staked(&w, 340, alice, Hash::from_bytes([5; 32]));
         bad(checkin_tx(&w, &l, &prev, rec, &fake_prev, fake, 20, DAY, DAY, &w.alice), "look-alike NFT outside the collection");
     }
 
@@ -833,9 +833,9 @@ mod tests {
         early.set_script(2, entry_sigscript(&l.rewards.compile(rec).unwrap(), "claim", &[3i64.into(), week.into(), (-1i64).into()]).unwrap());
         assert!(early.run(2).is_err_and(|e| by_script(&e)), "stated DAA after the lock time");
 
-        let (legendary_prev, legendary) = staked(&w, 2_900, alice, w.nft_covid);
+        let (legendary_prev, legendary) = staked(&w, 340, alice, w.nft_covid);
         claim(DAA_PER_DAY, Some((&legendary_prev, legendary)), paid, alice, &w.alice).run_all().expect("legendary claims every day");
-        let (epic_prev, epic) = staked(&w, 2_500, alice, w.nft_covid);
+        let (epic_prev, epic) = staked(&w, 300, alice, w.nft_covid);
         bad(claim(DAA_PER_DAY, Some((&epic_prev, epic)), paid, alice, &w.alice), "epic waits 2 days");
 
         let fake = existing(&l, rec, Hash::from_bytes([5; 32]));
@@ -869,7 +869,7 @@ mod tests {
         let alice = xonly(&w.alice);
         let rec = record(alice, 30, 0);
         let prev = existing(&l, rec, l.covid);
-        let (nft_prev, n) = staked(&w, 2_900, alice, w.nft_covid);
+        let (nft_prev, n) = staked(&w, 340, alice, w.nft_covid);
         let budget = |units: u64| units.div_ceil(10_000);
         let mint = mint_tx(&w, &w.root_tx, w.root, alice, MINT_PRICE as u64);
         let open = open_tx(&l, alice, pool_output(&l, MONTH, ENTRY_PRICE));

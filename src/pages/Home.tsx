@@ -11,7 +11,7 @@ const STEPS = [
   { title: "Chase the high score", text: "Eat pellets, flip the ghosts with power pellets, grab the Kaspa coins." },
   {
     title: "Win the pool",
-    text: "All KAS sits in a Kaspa contract that pays the whole pot to one address: the #1 verified player of the month. Every winning replay is public, so anyone can check it.",
+    text: "All KAS sits in a Kaspa contract. The top 3 verified players of the month share the pool when it closes; 1st place also gets a bonus NFT.",
   },
 ];
 
@@ -26,7 +26,7 @@ export default function Home() {
         <div className="w-full max-w-md"><SkinPreview skin={DEFAULT_SKIN} /></div>
         <div className="flex flex-wrap justify-center gap-4">
           <Link to="/play" className="font-arcade rounded-lg bg-kas px-6 py-4 text-sm text-black shadow-[0_0_24px] shadow-kas/60 hover:brightness-110">PLAY NOW</Link>
-          <Link to="/marketplace" className="rounded-lg border border-white/20 px-6 py-4 text-sm hover:border-kas">Browse Marketplace</Link>
+          <Link to="/shop" className="rounded-lg border border-white/20 px-6 py-4 text-sm hover:border-kas">Browse Shop</Link>
         </div>
       </section>
 

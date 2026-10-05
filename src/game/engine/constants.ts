@@ -16,8 +16,36 @@ export const TURN_TOLERANCE = 26;
 export const TURN_BUFFER_FRAMES = 16;
 /** Special input: use one bought extra life (recorded in the replay like a key press). */
 export const BUY_LIFE = 4;
-/** Cap on bought lives per game, so paid boosts cannot buy an endless run. */
-export const MAX_BOUGHT_LIVES = 3;
+/** Cap on bought lives per game (across all levels), so paid boosts cannot buy an endless run. Raising it keeps old replays valid: clients never recorded more than the old cap of 3. */
+export const MAX_BOUGHT_LIVES = 10;
+/** Special inputs: use one bought potion (recorded in the replay like a key press). */
+export const USE_SHIELD = 5;
+export const USE_FREEZE = 6;
+export const USE_SURGE = 7;
+export const USE_SPEED = 8;
+export const USE_MAGNET = 9;
+export const USE_GHOSTHUNT = 10;
+/** How long Ghost Shield / Ghost Freeze / Score Surge / Speed Coffee / Ghost Magnet last once used. */
+export const SHIELD_FRAMES = msToFrames(5000);
+export const FREEZE_FRAMES = msToFrames(5000);
+export const SURGE_FRAMES = msToFrames(8000);
+export const SPEED_FRAMES = msToFrames(8000);
+export const MAGNET_FRAMES = msToFrames(8000);
+/** Ghost Hunt's fright window — fixed, unlike a power pellet's level-tuned `frightFrames`. */
+export const GHOSTHUNT_FRAMES = msToFrames(6000);
+/** Score Surge's score multiplier while active. */
+export const SURGE_MULT = 2;
+/** Speed Coffee's movement speed multiplier while active. */
+export const SPEED_MULT = 1.25;
+/** Ghost Magnet's pickup radius (tiles) around Kasman while active. */
+export const MAGNET_RADIUS = 2;
+/** Cap on each potion per level, so paid boosts cannot trivialize a run; resets when the level clears (`resetLevel`). */
+export const MAX_SHIELD_PER_LEVEL = 3;
+export const MAX_FREEZE_PER_LEVEL = 3;
+export const MAX_SURGE_PER_LEVEL = 3;
+export const MAX_SPEED_PER_LEVEL = 3;
+export const MAX_MAGNET_PER_LEVEL = 3;
+export const MAX_GHOSTHUNT_PER_LEVEL = 3;
 export const DX = [0, -1, 0, 1];
 export const DY = [-1, 0, 1, 0];
 export const opposite = (dir: number) => (dir + 2) % 4;

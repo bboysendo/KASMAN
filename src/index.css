@@ -22,3 +22,39 @@ body {
 
 /* Landscape phones: too short for a sticky header plus the maze. */
 @custom-variant short (@media (max-height: 500px));
+
+/* Neon "SOON" badge (nav) and the PVP teaser's headline: a slow glow pulse, off for reduced motion. */
+@keyframes neon-pulse {
+  0%, 100% { opacity: 1; filter: brightness(1); }
+  50% { opacity: 0.75; filter: brightness(1.35); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .neon-pulse { animation: neon-pulse 1.8s ease-in-out infinite; }
+}
+
+/* Chest-opening popup (Shop "Chests" tab, ChestOpenModal): shake+glow while sealed, a burst of
+   sparks and a scale-out on opening, rewards rising into place one by one. */
+@keyframes chest-shake {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  20% { transform: translateX(-5px) rotate(-4deg); }
+  40% { transform: translateX(5px) rotate(4deg); }
+  60% { transform: translateX(-4px) rotate(-3deg); }
+  80% { transform: translateX(4px) rotate(3deg); }
+}
+@keyframes chest-glow {
+  0%, 100% { filter: drop-shadow(0 0 12px currentcolor); }
+  50% { filter: drop-shadow(0 0 32px currentcolor); }
+}
+@keyframes chest-pop {
+  0% { transform: scale(1); opacity: 1; }
+  55% { transform: scale(1.38); opacity: 1; }
+  100% { transform: scale(0.5); opacity: 0; }
+}
+@keyframes spark-fly {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+}
+@keyframes reward-pop {
+  0% { transform: translateY(16px) scale(0.75); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}

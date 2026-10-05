@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import KasmanIcon from "../components/KasmanIcon";
+import NftThumb from "../components/NftThumb";
+import PotionIcon from "../components/PotionIcon";
 import PrizePool from "../components/PrizePool";
 import SkinPreview from "../components/SkinPreview";
 import { SKINS, getSkin } from "../game/render/skins";
 import { claim, daaToMs, holdings, onchainReady, rewardTimes, virtualDaa, type Holdings } from "../lib/chain";
+import { bonusTokensFor } from "../lib/bonusTokens";
 import { rarityRules } from "../lib/covenant";
 import { getAccount, msUntilPayout } from "../lib/leaderboard";
-import { DAILY_REWARD } from "../lib/prices";
+import { DAILY_REWARD, FIRST_PLACE_NFT, POTIONS, PRIZE_SPLIT } from "../lib/prices";
 import { shortAddress } from "../lib/useWallet";
 import { useLeaderboard } from "../lib/useLeaderboard";
 import { useStore } from "../store";
@@ -25,6 +28,8 @@ export default function Inventory() {
   const extraLives = useStore((s) => s.extraLives);
   const tickets = useStore((s) => s.tickets);
   const freeGames = useStore((s) => s.freeGames);
+  const shards = useStore((s) => s.shards);
+  const ownedPotions = useStore((s) => s.ownedPotions);
   const address = useStore((s) => s.address);
   const syncAccount = useStore((s) => s.syncAccount);
   const skins = SKINS.filter((s) => owned.includes(s.id));
@@ -77,7 +82,7 @@ export default function Inventory() {
     <div className="mx-auto max-w-6xl px-4 py-10">
       <h1 className="font-arcade text-xl text-yellow-300 sm:text-2xl">INVENTORY</h1>
 
-      <h2 className={`mt-8 ${section}`}>Info</h2>
+      <h2 className={`mt-8 ${section}`}>Lives</h2>
       <ul className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <li className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
           <span aria-hidden="true"><KasmanIcon skin={getSkin(equipped)} size={44} /></span>
@@ -95,9 +100,43 @@ export default function Inventory() {
           <p className="text-sm text-white/60">Free {freeGames === 1 ? "game" : "games"} left today</p>
         </li>
       </ul>
-      {extraLives === 0 && (
+
+      <h2 className={`mt-10 ${section}`}>Puzzle Shards</h2>
+      <ul className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <li className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <img src="/assets/shards/puzzle-shard.png" alt="" aria-hidden="true" className="h-11 w-11 object-contain" />
+          <div>
+            <p className="font-arcade text-yellow-300">{shards}</p>
+            <p className="text-sm text-white/60">Puzzle {shards === 1 ? "Shard" : "Shards"}</p>
+          </div>
+        </li>
+      </ul>
+
+      <h2 className={`mt-10 ${section}`}>Potions / Items</h2>
+      <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {POTIONS.map((potion) => {
+          const hex = `#${potion.color.toString(16).padStart(6, "0")}`;
+          return (
+            <li
+              key={potion.id}
+              className="flex items-center gap-4 rounded-xl border p-4"
+              style={{ borderColor: `${hex}70`, background: `${hex}0d` }}
+              title={`Up to ${potion.maxPerLevel} per level`}
+            >
+              <span className="shrink-0" style={{ filter: `drop-shadow(0 0 10px ${hex}aa)` }}>
+                <PotionIcon color={potion.color} size={44} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-arcade text-sm uppercase leading-tight" style={{ color: hex }}>{potion.name}</p>
+                <p className="font-arcade mt-1 text-lg text-white/80">x{ownedPotions[potion.id]}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {Object.values(ownedPotions).every((n) => n === 0) && (
         <p className="mt-3 text-sm text-white/50">
-          No extra lives. <Link to="/marketplace" className="text-kas hover:underline">Buy some in the Marketplace</Link>.
+          No potions yet. <Link to="/shop" className="text-kas hover:underline">Buy some in the Shop</Link>.
         </p>
       )}
 
@@ -106,17 +145,34 @@ export default function Inventory() {
       )}
 
       <h2 className={`mt-10 ${section}`}>Prize pool</h2>
-      <div className="mt-4 flex flex-wrap items-center gap-4">
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
         <PrizePool pool={pool} />
+        <div className="rounded-xl border border-yellow-300/30 bg-[radial-gradient(ellipse_at_top_left,rgba(253,224,71,0.12),transparent_70%)] p-4">
+          <p className="text-xs uppercase tracking-widest text-yellow-300/80">This month&apos;s bonus NFT</p>
+          <div className="mt-2 flex items-center gap-3">
+            <NftThumb className="size-12" />
+            <p className="text-sm text-white/80">1st Place Bonus Reward: <span className="font-semibold text-yellow-300">{FIRST_PLACE_NFT.name}</span></p>
+          </div>
+          <a
+            href={FIRST_PLACE_NFT.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 block rounded-lg border border-white/20 py-2 text-center text-xs hover:bg-white/5"
+          >
+            View on KaspaCom
+          </a>
+        </div>
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
           <p className="text-xs uppercase tracking-widest text-white/50">#1 this month</p>
           <p className="font-arcade mt-2 text-2xl text-kas">{leader ? leader.name || shortAddress(leader.address) : "—"}</p>
         </div>
       </div>
       <p className="mt-3 text-sm text-white/50">
-        {isLeader
-          ? "You're #1 right now — the whole pool is paid to you after the month closes."
-          : "The whole pool goes to whoever is #1 when the month closes."}{" "}
+        {isLeader ? "You're #1 right now. " : ""}
+        {Math.round((1 - PRIZE_SPLIT.treasuryShare) * 100)}% of the pool splits among the top 3 when the month closes —{" "}
+        {Math.round(PRIZE_SPLIT.first * 100)}% to 1st (plus the bonus NFT), {Math.round(PRIZE_SPLIT.second * 100)}% to 2nd,{" "}
+        {Math.round(PRIZE_SPLIT.third * 100)}% to 3rd — and {Math.round(PRIZE_SPLIT.treasuryShare * 100)}% goes to game maintenance.{" "}
+        {bonusTokensFor().length > 0 && "Bonus tokens of the month split the same 50/30/20 in full. "}
         Payout is done by hand by the Kasman owner, not automatically. Month closes in {formatWait(msUntilPayout())}.
       </p>
 

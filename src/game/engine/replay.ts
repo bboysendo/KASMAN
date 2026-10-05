@@ -1,9 +1,9 @@
-import { BUY_LIFE, NONE } from "./constants";
+import { BUY_LIFE, NONE, USE_FREEZE, USE_GHOSTHUNT, USE_MAGNET, USE_SHIELD, USE_SPEED, USE_SURGE } from "./constants";
 import { createGame, step, type GameState } from "./game";
 
 /** Everything needed to re-simulate a run: seed plus every direction press and its frame. Bump `v` when the simulation changes. */
 export interface Replay {
-  v: 6;
+  v: 15;
   seed: number;
   inputs: [frame: number, dir: number][];
   frames: number;
@@ -13,7 +13,7 @@ const MAX_FRAMES = 60 * 60 * 60 * 3; // 3 hours of play
 
 /** Pass `from` to keep recording a run restored with `simulateReplay(from)`. */
 export function createRecorder(seed: number, from?: Replay) {
-  const replay: Replay = from ? { ...from, inputs: [...from.inputs] } : { v: 6, seed, inputs: [], frames: 0 };
+  const replay: Replay = from ? { ...from, inputs: [...from.inputs] } : { v: 15, seed, inputs: [], frames: 0 };
   return {
     replay,
     /** Call right before each `step(state, input)`. */
@@ -45,11 +45,16 @@ export function decodeReplay(text: string): Replay | null {
   try {
     const r = JSON.parse(atob(text.replace(/-/g, "+").replace(/_/g, "/")));
     const valid =
-      r?.v === 6 &&
+      r?.v === 15 &&
       Number.isInteger(r.seed) &&
       Number.isInteger(r.frames) &&
       Array.isArray(r.inputs) &&
-      r.inputs.every((e: unknown) => Array.isArray(e) && Number.isInteger(e[0]) && [0, 1, 2, 3, BUY_LIFE].includes(e[1] as number));
+      r.inputs.every(
+        (e: unknown) =>
+          Array.isArray(e) &&
+          Number.isInteger(e[0]) &&
+          [0, 1, 2, 3, BUY_LIFE, USE_SHIELD, USE_FREEZE, USE_SURGE, USE_SPEED, USE_MAGNET, USE_GHOSTHUNT].includes(e[1] as number),
+      );
     return valid ? r : null;
   } catch {
     return null;

@@ -1,4 +1,4 @@
-// Themed sprite drawing shared by the Pixi renderer and the Marketplace previews.
+// Themed sprite drawing shared by the Pixi renderer and the Shop previews.
 // Everything draws through `Pen`, a subset of the Pixi Graphics API that a
 // Canvas 2D adapter also implements, so a preview looks exactly like the game.
 // Units are world pixels (one tile = 16), centered on the sprite, facing right.
@@ -385,6 +385,57 @@ export function drawFruit(pen: Pen, style: FruitStyle, c: number) {
       pen.rect(-4, -4, 8, 8).fill(c);
       pen.rect(-2, -2, 4, 4).fill({ color: 0x000000, alpha: 0.4 });
       break;
+  }
+}
+
+// ---------- Potions ----------
+
+const POTION_GLASS = 0xcfeaff;
+const POTION_CORK = 0x8a5a2b;
+
+/** 7 wide, 12 tall pixel grid: c = cork, n/g = glass, L = liquid, h = highlight bubble. */
+const POTION_GRID = [
+  "..ccc..",
+  "..ccc..",
+  "..nnn..",
+  ".ggggg.",
+  "ggggggg",
+  "gLLLLLg",
+  "gLLLLLg",
+  "gLhLLLg",
+  "gLLLLLg",
+  "gLLLLLg",
+  ".ggggg.",
+  "..ggg..",
+].map((row) => row.padEnd(7, "."));
+
+/** World size (height) a `drawPotion` icon needs, for callers sizing a viewport around it. */
+export const POTION_SIZE = 20.4;
+
+/** Retro pixel-art potion bottle, centered on (0, 0). `color` is the liquid. */
+export function drawPotion(pen: Pen, color: number) {
+  const cell = 1.7;
+  const w = 7;
+  const h = POTION_GRID.length;
+  const ox = -(w * cell) / 2;
+  const oy = -(h * cell) / 2;
+  const fills: [string, Fill][] = [
+    ["c", POTION_CORK],
+    ["n", POTION_GLASS],
+    ["g", POTION_GLASS],
+    ["L", color],
+    ["h", { color: 0xffffff, alpha: 0.85 }],
+  ];
+  for (const [ch, fill] of fills) {
+    let any = false;
+    POTION_GRID.forEach((row, y) => {
+      for (let x = 0; x < w; x++) {
+        if (row[x] !== ch) continue;
+        any = true;
+        pen.rect(ox + x * cell, oy + y * cell, cell + 0.04, cell + 0.04);
+      }
+    });
+    if (any) pen.fill(fill);
   }
 }
 

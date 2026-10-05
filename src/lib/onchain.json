@@ -18,7 +18,7 @@
     },
     "transfer": "25061d6e"
   },
-  "maxSupply": 3000,
+  "maxSupply": 350,
   "maxTokenSupply": 1000000000000000000,
   "mintPrice": 5000000000,
   "minter": {

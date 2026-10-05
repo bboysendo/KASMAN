@@ -1,15 +1,15 @@
 # Kasman
 
-Arcade maze chase for the Kaspa community: Home, Play (game + monthly leaderboard), Marketplace (lives, cosmetic skins, Kasman NFT) and Inventory.
+Arcade maze chase for the Kaspa community: Home, Play (game + monthly leaderboard), Shop (potions, cosmetic skins, chest crafting), Inventory, Quests and Staking (Kasman NFT).
 Every day you play earns KASMAN tokens; a staked Kasman NFT (50 KAS) gives free daily games, a reward multiplier and shorter claim waits by rarity:
 
 | Rarity | NFT # | Free games / day | Multiplier | Claim every |
 |---|---|---|---|---|
 | No NFT | - | 0 | 1.0x | 7 days |
-| Common | 1-1500 | 1 | 1.1x | 5 days |
-| Rare | 1501-2400 | 2 | 1.3x | 3 days |
-| Epic | 2401-2850 | 3 | 1.6x | 48 h |
-| Legendary | 2851-3000 | 4 | 2.0x | 24 h |
+| Common | 1-175 | 1 | 1.1x | 5 days |
+| Rare | 176-280 | 2 | 1.3x | 3 days |
+| Epic | 281-325 | 3 | 1.6x | 48 h |
+| Legendary | 326-350 | 4 | 2.0x | 24 h |
 
 Base reward: 1,000 KASMAN per day played. Everything happens on Kaspa L1, signed with KasWare; no server keeps balances or can mint:
 

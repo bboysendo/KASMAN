@@ -2,9 +2,16 @@ import { Application, Assets, Container, Graphics, GraphicsContext, Sprite, Text
 import { GlowFilter } from "pixi-filters";
 import { DX, DY, DYING_FRAMES, FRIGHT_FLASH_FRAMES, LEFT, U, fruitForLevel } from "../engine/constants";
 import { isFrightFlashing, type GameEvent, type GameState } from "../engine/game";
-import { H, POWER, W, mazeFor } from "../engine/map";
+import { H, MAZE_COUNT, POWER, W, mazeFor } from "../engine/map";
 import type { Skin } from "./skins";
 import { KASMAN_SIZE, drawBackdrop, drawFruit, drawGhost, drawKasmanGear, drawPellet, kasmanUrl } from "./sprites";
+
+/** The player's own puzzle-piece art (public/images/pieza.png), background removed and trimmed. */
+const SHARD_URL = "/assets/shards/puzzle-shard.png";
+/** Glow tint matching the piece's green. */
+const SHARD_GLOW = 0x4ade80;
+/** World-pixel height the shard renders at (about the same footprint as the bonus fruit). */
+const SHARD_SIZE = 13;
 
 /** World pixels per tile. The world container is scaled to fit the host. */
 const T = 16;
@@ -14,6 +21,14 @@ const WORLD_H = H * T;
 export type Snapshot = { x: number; y: number }[]; // pac first, then ghosts
 
 export const snapshot = (s: GameState): Snapshot => [s.pac, ...s.ghosts].map(({ x, y }) => ({ x, y }));
+
+/** Glowing ring for an active potion effect, hidden until `drawPac` turns it on. */
+function auraGraphic(color: number) {
+  const g = new Graphics().circle(0, 0, KASMAN_SIZE * 0.6).stroke({ width: 2, color, alpha: 0.9 });
+  g.filters = [new GlowFilter({ distance: 12, outerStrength: 2.4, innerStrength: 0, color, quality: 0.3 })];
+  g.visible = false;
+  return g;
+}
 
 interface Particle { g: Graphics; vx: number; vy: number; life: number; max: number }
 interface Popup { t: Text; life: number }
@@ -26,10 +41,23 @@ export class PixiRenderer {
   private pellets = new Container();
   private pelletByTile = new Map<number, Graphics>();
   private fruit = new Graphics();
+  /** Puzzle Shard pickups: glow steadily and blink on top of that, so they read apart from pac-dots.
+   * One sprite per possible shard slot (the highest level has MAZE_COUNT of them); unused ones stay hidden. */
+  private shards = Array.from({ length: MAZE_COUNT }, () => new Sprite());
+  /** Uniform scale that renders the loaded texture at SHARD_SIZE tall; set once it loads. */
+  private shardScale = 1;
   /** Kasman: the skin's sprite plus its accessory. */
   private pac = new Container();
   private kasman = new Sprite();
   private gear = new Graphics();
+  // Colors match the potions in src/lib/prices.ts.
+  private shieldAura = auraGraphic(0x3b82f6);
+  private freezeAura = auraGraphic(0x10b981);
+  private surgeAura = auraGraphic(0xef4444);
+  private speedAura = auraGraphic(0xeab308);
+  private magnetAura = auraGraphic(0xa855f7);
+  // No aura for Ghost Hunt: it reuses the power pellet's frighten effect, already fully visible
+  // as all 4 ghosts turning blue.
   private ghosts = [0, 1, 2, 3].map(() => new Graphics());
   private fx = new Container();
   private particles: Particle[] = [];
@@ -45,8 +73,18 @@ export class PixiRenderer {
     this.app = app;
     this.skin = skin;
     this.kasman.anchor.set(0.5);
-    this.pac.addChild(this.kasman, this.gear);
-    this.world.addChild(this.backdrop, this.maze, this.pellets, this.fruit, ...this.ghosts, this.pac, this.fx);
+    this.pac.addChild(
+      this.shieldAura, this.freezeAura, this.surgeAura, this.speedAura, this.magnetAura, this.kasman, this.gear,
+    );
+    for (const g of this.shards) {
+      g.anchor.set(0.5);
+      g.filters = [new GlowFilter({ distance: 10, outerStrength: 2, innerStrength: 0, color: SHARD_GLOW, quality: 0.3 })];
+    }
+    void Assets.load<Texture>(SHARD_URL).then((t) => {
+      this.shardScale = SHARD_SIZE / t.height;
+      for (const g of this.shards) g.texture = t;
+    });
+    this.world.addChild(this.backdrop, this.maze, this.pellets, this.fruit, ...this.shards, ...this.ghosts, this.pac, this.fx);
     // Clip actors crossing the tunnel edges.
     const mask = new Graphics().rect(0, 0, WORLD_W, WORLD_H).fill(0xffffff);
     this.world.addChild(mask);
@@ -189,9 +227,12 @@ export class PixiRenderer {
       if (e.type === "ghostEaten" || e.type === "fruit") {
         this.popup(e.x, e.y, String(e.points), e.type === "fruit" ? 0xffe16a : 0x78f7ff);
         this.burst(e.x * T + T / 2, e.y * T + T / 2, e.type === "fruit" ? 0xffe16a : this.skin.wallGlow, 18, 1.6);
+      } else if (e.type === "shardCollected") {
+        this.popup(e.x, e.y, "1 Puzzle Shards", SHARD_GLOW);
+        this.burst(e.x * T + T / 2, e.y * T + T / 2, SHARD_GLOW, 24, 1.8);
       } else if (e.type === "death") {
         this.shake = 10;
-      } else if (e.type === "power") {
+      } else if (e.type === "power" || e.type === "ghosthunt") {
         this.shake = Math.max(this.shake, 3);
       }
     }
@@ -270,6 +311,7 @@ export class PixiRenderer {
     }
 
     this.drawFruit(s, motion);
+    this.drawShards(s, motion);
     const p = lerp(0, s.pac);
     this.drawPac(s, toWorld(p.x), toWorld(p.y));
     s.ghosts.forEach((ghost, i) => {
@@ -297,6 +339,22 @@ export class PixiRenderer {
     g.position.set(s.fruit.x * T + T / 2, s.fruit.y * T + T / 2 + (motion ? Math.sin(s.frame * 0.1) : 0));
   }
 
+  /** Retro blink on top of the steady glow (the GlowFilter set up in the constructor). */
+  private drawShards(s: GameState, motion: boolean) {
+    const visible = !motion || Math.floor(s.frame / 15) % 2 === 0;
+    const pulse = motion ? 0.85 + 0.25 * Math.sin(s.frame * 0.15) : 1;
+    this.shards.forEach((g, i) => {
+      const shard = s.shards[i];
+      if (!shard?.active) {
+        g.visible = false;
+        return;
+      }
+      g.visible = visible;
+      g.scale.set(this.shardScale * pulse);
+      g.position.set(shard.x * T + T / 2, shard.y * T + T / 2);
+    });
+  }
+
   private drawPac(s: GameState, x: number, y: number) {
     const g = this.pac;
     const dying = s.phase === "dying" ? 1 - s.phaseTimer / DYING_FRAMES : 0;
@@ -308,6 +366,18 @@ export class PixiRenderer {
     const k = (KASMAN_SIZE / this.kasman.texture.height) * (1 - dying);
     this.kasman.scale.set(k * (1 + bob), k * (1 - bob));
     g.scale.set(s.pac.dir === LEFT && !dying ? -1 : 1, 1);
+
+    const pulse = this.reducedMotion ? 1 : 1 + 0.12 * Math.sin(s.frame * 0.3);
+    this.shieldAura.visible = s.shieldTimer > 0;
+    this.shieldAura.scale.set(pulse);
+    this.freezeAura.visible = s.freezeTimer > 0;
+    this.freezeAura.scale.set(pulse);
+    this.surgeAura.visible = s.surgeTimer > 0;
+    this.surgeAura.scale.set(pulse);
+    this.speedAura.visible = s.speedTimer > 0;
+    this.speedAura.scale.set(pulse);
+    this.magnetAura.visible = s.magnetTimer > 0;
+    this.magnetAura.scale.set(pulse);
   }
 
   private drawGhost(s: GameState, i: number, x: number, y: number, motion: boolean) {
