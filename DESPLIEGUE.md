@@ -203,6 +203,22 @@ El pago es **manual**: tú decides cuándo. El contrato no bloquea el dinero has
 
 La raíz (`root`) queda grabada on-chain dentro de la transacción de pago: cualquiera puede descargar el export y comprobar que coincide.
 
+### 7.1. Tokens extra del bote (KASPI, MEME…)
+
+Cada mes puede llevar tokens extra además del KAS. Se configuran en `src/lib/bonusTokens.ts`, en `BONUS_TOKENS`, con la clave `YYYY-MM` del mes:
+
+```ts
+"2026-11": [
+  { symbol: "KASPI", name: "Kaspi", amount: 1000, icon: "/assets/tokens/kaspi.png" },
+  { symbol: "MEME", amount: 5000000 },
+],
+```
+
+- `symbol` (obligatorio), `amount` (cantidad total a repartir), `name` y `icon` (URL o ruta bajo `public/`) son opcionales. Sin icono se muestra la inicial del símbolo.
+- Se reparten **íntegros** 50/30/20 entre el top 3 (sin el 10% de mantenimiento, que solo aplica al KAS). Las tarjetas PRIZE POOL y MONTHLY REWARDS lo calculan solos.
+- Es solo visual: ningún contrato ni el Worker guardan estos importes. Hay que tener los tokens en el monedero del bote y pagarlos a mano, junto con el KAS, en la operación de la sección 7.
+- Para publicarlo: editar el archivo, `pnpm build` y desplegar (sección 5.4). Un mes sin entrada no muestra ningún token extra.
+
 ---
 
 ## 8. Colección NFT + recompensas KASMAN (listo, sin desplegar)

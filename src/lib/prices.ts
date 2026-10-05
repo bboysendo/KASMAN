@@ -29,3 +29,32 @@ export const rarityOf = (tokenId: number | null): Rarity =>
   (tokenId && RARITIES.find((r) => r.maxTokenId > 0 && tokenId <= r.maxTokenId)) || RARITIES[0];
 
 export const today = (d = new Date()) => d.toISOString().slice(0, 10);
+
+/**
+ * How the monthly pool is meant to split when the owner pays it out. Display only: the
+ * KasmanPool covenant still pays a single address per month (`contracts/KasmanPool.sil`,
+ * `tx.outputs.length == 1`), so the owner distributes 2nd/3rd manually after withdrawing.
+ */
+export const PRIZE_SPLIT = {
+  /** Of the total pool, kept for game upkeep. */
+  treasuryShare: 0.1,
+  /** Of the 90% left after that, by rank. */
+  first: 0.5,
+  second: 0.3,
+  third: 0.2,
+} as const;
+
+/** KAS amounts by rank (plus the treasury cut) for a given total pool balance. */
+export function prizeSplit(pool: number) {
+  const treasury = pool * PRIZE_SPLIT.treasuryShare;
+  const distributable = pool - treasury;
+  return {
+    treasury,
+    first: distributable * PRIZE_SPLIT.first,
+    second: distributable * PRIZE_SPLIT.second,
+    third: distributable * PRIZE_SPLIT.third,
+  };
+}
+
+/** 1st place's exclusive bonus prize, on top of its KAS share. */
+export const FIRST_PLACE_NFT = { name: "Yonatoshi NFT #1594", url: "https://kaspa.com/nft/collections/YONATOSHI/1594" };
