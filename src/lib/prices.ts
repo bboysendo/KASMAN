@@ -140,7 +140,7 @@ export function prizeSplit(pool: number) {
 }
 
 /** 1st place's exclusive bonus prize, on top of its KAS share. */
-export const FIRST_PLACE_NFT = { name: "Yonatoshi NFT #1594", url: "https://kaspa.com/nft/collections/YONATOSHI/1594" };
+export const FIRST_PLACE_NFT = { name: "NEURAL KEY Society #151", url: "https://kaspa.com/nft/collections/NEURALKEY/151" };
 
 /**
  * Social Quests (Play "Quests" tab): simple one-time tasks, rewarded once per wallet after the

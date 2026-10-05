@@ -1,15 +1,13 @@
 import { useState } from "react";
+import { FIRST_PLACE_NFT } from "../lib/prices";
 
-const NFT_IMAGE_URL = "/assets/nft/yonatoshi-1594.png";
-/** Some image saves double up the extension; try that path too before giving up. */
-const NFT_IMAGE_FALLBACK_URL = `${NFT_IMAGE_URL}.png`;
+const NFT_IMAGE_URL = "/assets/nft/neuralkey151.jpg";
 
 /**
- * Yonatoshi #1594's preview thumbnail (the monthly bonus NFT, `FIRST_PLACE_NFT` in
- * `src/lib/prices.ts`). Falls back to a plain gradient box if neither path loads.
+ * Preview thumbnail of the monthly bonus NFT (`FIRST_PLACE_NFT` in `src/lib/prices.ts`).
+ * Falls back to a plain gradient box if the image doesn't load.
  */
 export default function NftThumb({ className = "" }: { className?: string }) {
-  const [src, setSrc] = useState(NFT_IMAGE_URL);
   const [failed, setFailed] = useState(false);
 
   if (failed) {
@@ -17,9 +15,9 @@ export default function NftThumb({ className = "" }: { className?: string }) {
   }
   return (
     <img
-      src={src}
-      alt="Yonatoshi #1594"
-      onError={() => (src === NFT_IMAGE_URL ? setSrc(NFT_IMAGE_FALLBACK_URL) : setFailed(true))}
+      src={NFT_IMAGE_URL}
+      alt={FIRST_PLACE_NFT.name}
+      onError={() => setFailed(true)}
       className={`shrink-0 rounded-lg border border-yellow-300/30 object-cover ${className}`}
     />
   );
