@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import FirstPlaceNft from "../components/FirstPlaceNft";
 import GamesGoalProgress from "../components/GamesGoalProgress";
 import Leaderboard from "../components/Leaderboard";
 import PreviousMonthWinners from "../components/PreviousMonthWinners";
@@ -19,14 +20,21 @@ export default function LeaderboardPage() {
         This month's top players, open to everyone. Total points add up every game submitted; time is the fastest clear of all {MAZE_COUNT} levels.
       </p>
 
-      <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <PrizePool pool={pool} />
-        <GamesGoalProgress />
-        <PrizeDistribution pool={pool} />
-        <PreviousMonthWinners />
+      <section className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="flex min-w-0 flex-col gap-4">
+          <PrizePool pool={pool} />
+          <FirstPlaceNft />
+        </div>
+        <PrizeDistribution pool={pool} className="min-w-0" />
+        <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-4 md:col-span-2 xl:col-span-1">
+          <GamesGoalProgress embedded />
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <PreviousMonthWinners embedded />
+          </div>
+        </div>
         <Link
           to="/play"
-          className="font-arcade flex items-center justify-center rounded-lg bg-kas px-6 py-4 text-center text-sm text-black shadow-[0_0_24px] shadow-kas/60 hover:brightness-110 sm:col-span-2 xl:col-span-4"
+          className="font-arcade flex items-center justify-center rounded-lg bg-kas px-6 py-4 text-center text-sm text-black shadow-[0_0_24px] shadow-kas/60 hover:brightness-110 md:col-span-2 xl:col-span-3"
         >
           PLAY NOW ({ENTRY_FEE_KAS} KAS)
         </Link>

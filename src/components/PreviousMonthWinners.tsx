@@ -36,7 +36,7 @@ function CopyAddress({ address }: { address: string }) {
  * withdrawn for payout. Mirrors `/api/month/:m/settlement`'s `rollover` rule (worker/index.ts):
  * below the games goal, nothing was meant to be paid out, so no KAS estimate is shown either.
  */
-export default function PreviousMonthWinners({ className = "" }: { className?: string }) {
+export default function PreviousMonthWinners({ className = "", embedded = false }: { className?: string; embedded?: boolean }) {
   const month = previousMonth();
   const [rows, setRows] = useState<PlayerEntry[] | null>(null);
   const [status, setStatus] = useState<PoolStatus | null>(null);
@@ -51,7 +51,7 @@ export default function PreviousMonthWinners({ className = "" }: { className?: s
   const shares = [amounts.first, amounts.second, amounts.third];
 
   return (
-    <div className={`rounded-xl border border-white/10 bg-white/[0.03] p-4 ${className}`}>
+    <div className={`${embedded ? "" : "rounded-xl border border-white/10 bg-white/[0.03] p-4"} ${className}`}>
       <p className="text-xs uppercase tracking-widest text-white/50">Last Month&apos;s Winners</p>
       <p className="mt-1 text-[11px] text-white/40">
         {month} &middot; {status && !goalReached ? "games goal not met" : "estimated 50/30/20 split, paid out by hand"}

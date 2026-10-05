@@ -7,7 +7,7 @@ import { getPoolStatus, type PoolStatus } from "../lib/leaderboard";
  * above it, the pool is shown as unlocked for payout. Advisory only, like `PrizeDistribution` —
  * the covenant itself pays out on the owner's manual decision (`/api/month/:m/settlement`).
  */
-export default function GamesGoalProgress({ className = "" }: { className?: string }) {
+export default function GamesGoalProgress({ className = "", embedded = false }: { className?: string; embedded?: boolean }) {
   const [status, setStatus] = useState<PoolStatus | null>(null);
   useEffect(() => {
     void getPoolStatus().then(setStatus, () => {});
@@ -19,7 +19,7 @@ export default function GamesGoalProgress({ className = "" }: { className?: stri
   const unlocked = paidGames >= gamesGoal;
 
   return (
-    <div className={`rounded-xl border p-4 ${unlocked ? "border-kas/30 bg-kas/5" : "border-white/10 bg-white/[0.03]"} ${className}`}>
+    <div className={`${embedded ? "" : `rounded-xl border p-4 ${unlocked ? "border-kas/30 bg-kas/5" : "border-white/10 bg-white/[0.03]"}`} ${className}`}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs uppercase tracking-widest text-white/50">Monthly Games Goal</p>
         <span className={`font-arcade shrink-0 text-[10px] ${unlocked ? "text-kas" : "text-yellow-300/80"}`}>

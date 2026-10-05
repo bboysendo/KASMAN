@@ -1,4 +1,3 @@
-import NftThumb from "./NftThumb";
 import TokenBadge from "./TokenBadge";
 import { displaySymbol, formatTokenAmount, KAS_TICKER, prizeTokensFor, rankAmounts } from "../lib/bonusTokens";
 import { FIRST_PLACE_NFT, PRIZE_SPLIT } from "../lib/prices";
@@ -22,6 +21,9 @@ export default function PrizeDistribution({ pool, className = "", compact = fals
           Prize distribution · {KAS_TICKER} keeps {pct(PRIZE_SPLIT.treasuryShare)} for game maintenance · bonus tokens split in full
         </p>
       )}
+      <p className={`mt-2 inline-block rounded-full border border-yellow-300/40 bg-yellow-300/10 px-2.5 py-1 font-semibold text-yellow-300 ${compact ? "text-[10px]" : "text-[11px] tracking-wide"}`}>
+        🏆 1ST PLACE INCLUDES {FIRST_PLACE_NFT.name.toUpperCase()}
+      </p>
 
       <div className={`flex flex-col ${compact ? "mt-1 gap-2" : "mt-3 gap-4"}`}>
         {tokens.map((token) => {
@@ -50,24 +52,6 @@ export default function PrizeDistribution({ pool, className = "", compact = fals
           );
         })}
       </div>
-
-      <div className={`flex items-center rounded-lg border border-yellow-300/30 bg-[radial-gradient(ellipse_at_top_left,rgba(253,224,71,0.12),transparent_70%)] ${compact ? "mt-1.5 gap-2 p-1.5" : "mt-4 gap-3 p-3"}`}>
-        <NftThumb className={compact ? "size-7" : "size-12"} />
-        <div className="min-w-0 flex-1">
-          <p className={`font-semibold text-yellow-300 ${compact ? "text-[10px]" : "text-xs"}`}>1st Place Bonus</p>
-          <p className={`truncate text-white/60 ${compact ? "text-[10px]" : "text-xs"}`}>{FIRST_PLACE_NFT.name}</p>
-        </div>
-      </div>
-      {!compact && (
-        <a
-          href={FIRST_PLACE_NFT.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-2 block rounded-lg border border-white/20 py-2 text-center text-xs hover:bg-white/5"
-        >
-          View on KaspaCom
-        </a>
-      )}
     </div>
   );
 }
