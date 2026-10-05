@@ -1,4 +1,4 @@
-import { formatTokenAmount, prizeTokensFor } from "../lib/bonusTokens";
+import { displaySymbol, formatTokenAmount, prizeTokensFor } from "../lib/bonusTokens";
 import TokenBadge from "./TokenBadge";
 
 /**
@@ -17,7 +17,7 @@ export default function PrizePool({ pool, className = "", compact = false }: { p
           <li key={token.symbol} className="flex items-center gap-2">
             <TokenBadge token={token} className={compact ? "size-4" : "size-6"} />
             <span className={`font-arcade whitespace-nowrap ${i === 0 ? "text-kas" : "text-white"} ${compact ? "text-xs" : i === 0 ? "text-2xl" : "text-sm"}`}>
-              {formatTokenAmount(token.amount)} {token.symbol}
+              {formatTokenAmount(token.amount)} {displaySymbol(token)}
             </span>
           </li>
         ))}

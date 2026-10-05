@@ -4,14 +4,15 @@ import PrizePool from "../components/PrizePool";
 import { useLeaderboard } from "../lib/useLeaderboard";
 import SkinPreview from "../components/SkinPreview";
 import { DEFAULT_SKIN } from "../game/render/skins";
+import { KAS_TICKER } from "../lib/bonusTokens";
 import { ENTRY_FEE_KAS } from "../lib/leaderboard";
 
 const STEPS = [
-  { title: `Pay ${ENTRY_FEE_KAS} KAS`, text: "Connect your KasWare wallet. Each entry buys one game with three lives and feeds the monthly pool." },
+  { title: `Pay ${ENTRY_FEE_KAS} ${KAS_TICKER}`, text: "Connect your KasWare wallet. Each entry buys one game with three lives and feeds the monthly pool." },
   { title: "Chase the high score", text: "Eat pellets, flip the ghosts with power pellets, grab the Kaspa coins." },
   {
     title: "Win the pool",
-    text: "All KAS sits in a Kaspa contract. The top 3 verified players of the month share the pool when it closes; 1st place also gets a bonus NFT.",
+    text: `All ${KAS_TICKER} sits in a Kaspa contract. The top 3 verified players of the month share the pool when it closes; 1st place also gets a bonus NFT.`,
   },
 ];
 

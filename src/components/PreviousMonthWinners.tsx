@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getMonthlyLeaderboard, getPoolStatus, type PlayerEntry, type PoolStatus } from "../lib/leaderboard";
+import { KAS_TICKER } from "../lib/bonusTokens";
 import { previousMonth, prizeSplit } from "../lib/prices";
 
 const MEDALS = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
@@ -75,7 +76,7 @@ export default function PreviousMonthWinners({ className = "" }: { className?: s
                   <span className="min-w-0 flex-1 truncate text-sm">
                     {MEDALS[i]} {r.xHandle ? `@${r.xHandle}` : r.name || "Anonymous"}
                   </span>
-                  {goalReached && <span className="font-arcade shrink-0 text-xs text-kas">{shares[i].toFixed(2)} KAS</span>}
+                  {goalReached && <span className="font-arcade shrink-0 text-xs text-kas">{shares[i].toFixed(2)} {KAS_TICKER}</span>}
                 </div>
                 <div className="mt-1.5 flex items-center gap-1.5">
                   <code className="min-w-0 flex-1 truncate text-[10px] text-white/40">{r.address}</code>

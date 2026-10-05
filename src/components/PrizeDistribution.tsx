@@ -1,6 +1,6 @@
 import NftThumb from "./NftThumb";
 import TokenBadge from "./TokenBadge";
-import { formatTokenAmount, prizeTokensFor, rankAmounts } from "../lib/bonusTokens";
+import { displaySymbol, formatTokenAmount, KAS_TICKER, prizeTokensFor, rankAmounts } from "../lib/bonusTokens";
 import { FIRST_PLACE_NFT, PRIZE_SPLIT } from "../lib/prices";
 
 /**
@@ -19,7 +19,7 @@ export default function PrizeDistribution({ pool, className = "", compact = fals
       <p className={`uppercase tracking-widest text-white/50 ${compact ? "text-[10px]" : "text-xs"}`}>Monthly Rewards</p>
       {!compact && (
         <p className="mt-1 text-[11px] text-white/40">
-          Prize distribution · KAS keeps {pct(PRIZE_SPLIT.treasuryShare)} for game maintenance · bonus tokens split in full
+          Prize distribution · {KAS_TICKER} keeps {pct(PRIZE_SPLIT.treasuryShare)} for game maintenance · bonus tokens split in full
         </p>
       )}
 
@@ -30,20 +30,20 @@ export default function PrizeDistribution({ pool, className = "", compact = fals
             <div key={token.symbol}>
               <div className={`flex items-center gap-1.5 font-semibold ${compact ? "text-[10px]" : "text-xs"}`}>
                 <TokenBadge token={token} className={compact ? "size-3.5" : "size-5"} />
-                <span className="uppercase tracking-widest text-white/60">{token.symbol}</span>
+                <span className="uppercase tracking-widest text-white/60">{displaySymbol(token)}</span>
               </div>
               <ul className={`flex flex-col ${compact ? "mt-0.5 gap-0.5 text-[11px]" : "mt-1.5 gap-1.5 text-sm"}`}>
                 <li className="flex items-center justify-between gap-2 whitespace-nowrap">
                   <span>🥇 1st <span className="text-white/40">({pct(PRIZE_SPLIT.first)})</span></span>
-                  <span className={`font-arcade shrink-0 text-kas ${compact ? "" : "text-xs"}`}>{formatTokenAmount(amounts.first)} {token.symbol}</span>
+                  <span className={`font-arcade shrink-0 text-kas ${compact ? "" : "text-xs"}`}>{formatTokenAmount(amounts.first)} {displaySymbol(token)}</span>
                 </li>
                 <li className="flex items-center justify-between gap-2 whitespace-nowrap">
                   <span>🥈 2nd <span className="text-white/40">({pct(PRIZE_SPLIT.second)})</span></span>
-                  <span className={`font-arcade shrink-0 text-white/80 ${compact ? "" : "text-xs"}`}>{formatTokenAmount(amounts.second)} {token.symbol}</span>
+                  <span className={`font-arcade shrink-0 text-white/80 ${compact ? "" : "text-xs"}`}>{formatTokenAmount(amounts.second)} {displaySymbol(token)}</span>
                 </li>
                 <li className="flex items-center justify-between gap-2 whitespace-nowrap">
                   <span>🥉 3rd <span className="text-white/40">({pct(PRIZE_SPLIT.third)})</span></span>
-                  <span className={`font-arcade shrink-0 text-white/80 ${compact ? "" : "text-xs"}`}>{formatTokenAmount(amounts.third)} {token.symbol}</span>
+                  <span className={`font-arcade shrink-0 text-white/80 ${compact ? "" : "text-xs"}`}>{formatTokenAmount(amounts.third)} {displaySymbol(token)}</span>
                 </li>
               </ul>
             </div>

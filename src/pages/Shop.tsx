@@ -8,6 +8,7 @@ import {
   CHESTS, chestPotionCount, KASM_DISCOUNT_RATE, KASM_PAYMENT_ENABLED, KASM_TICKER, MAX_POTION_ORDER_QTY, kasmPrice,
   type ChestId, type PotionId,
 } from "../lib/prices";
+import { KAS_TICKER } from "../lib/bonusTokens";
 import { useWallet } from "../lib/useWallet";
 import { useStore } from "../store";
 
@@ -103,7 +104,7 @@ export default function Shop() {
         <section role="tabpanel" aria-label="Potions">
           <p className="mt-4 text-center text-white/60">
             Retro power-ups. Use them mid-game with the key shown in Settings (1-6 by default) or by tapping their HUD icon.
-            KAS spent on potions goes to the monthly prize pool.
+            {KAS_TICKER} spent on potions goes to the monthly prize pool.
           </p>
 
           <div role="radiogroup" aria-label="Payment currency" className="mt-5 flex flex-wrap items-center justify-center gap-2">
@@ -113,7 +114,7 @@ export default function Shop() {
               aria-checked="true"
               className="rounded-lg bg-kas px-4 py-2 text-sm font-semibold text-black"
             >
-              Pay with KAS
+              Pay with {KAS_TICKER}
             </button>
             <span className="group relative">
               <button
@@ -201,7 +202,7 @@ export default function Shop() {
                     }
                     className="w-full rounded-lg bg-kas py-2 text-sm font-semibold text-black hover:brightness-110"
                   >
-                    Buy {qty} for {total} KAS
+                    Buy {qty} for {total} {KAS_TICKER}
                   </button>
                   <p className="text-[11px] text-white/30">or {kasmPrice(total)} {KASM_TICKER} (-{Math.round(KASM_DISCOUNT_RATE * 100)}%, locked)</p>
                 </li>
@@ -240,7 +241,7 @@ export default function Shop() {
                       },
                     })
                   } className="rounded-lg bg-kas py-2 text-sm font-semibold text-black hover:brightness-110">
-                  Buy for {skin.price} KAS
+                  Buy for {skin.price} {KAS_TICKER}
                 </button>
               )}
             </li>
@@ -304,7 +305,7 @@ export default function Shop() {
         <div role="dialog" aria-modal="true" aria-labelledby="buy-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-sm rounded-xl border border-kas/40 bg-[#0a1118] p-6">
             <h2 id="buy-title" className="font-semibold">Buy {confirming.title}?</h2>
-            <p className="mt-2 text-sm text-white/60">{confirming.price} KAS, paid with KasWare to {confirming.to ?? "this month's prize pool contract"}.</p>
+            <p className="mt-2 text-sm text-white/60">{confirming.price} {KAS_TICKER}, paid with KasWare to {confirming.to ?? "this month's prize pool contract"}.</p>
             {error && <p role="alert" className="mt-2 text-sm text-red-400">{error}</p>}
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" disabled={paying} onClick={() => setConfirming(null)} className="rounded-lg px-4 py-2 text-sm hover:bg-white/5 disabled:opacity-40">Cancel</button>

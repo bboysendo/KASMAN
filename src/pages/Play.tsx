@@ -12,6 +12,7 @@ import { MAZE_COUNT } from "../game/engine/map";
 import { encodeReplay, type Replay } from "../game/engine/replay";
 import { onchainReady } from "../lib/chain";
 import { unlockAudio } from "../game/audio";
+import { KAS_TICKER } from "../lib/bonusTokens";
 import { ENTRY_FEE_KAS, formatRunTime, pay, startGame, submitScore } from "../lib/leaderboard";
 import { getSkin } from "../game/render/skins";
 import { useWallet } from "../lib/useWallet";
@@ -184,7 +185,7 @@ function Gate({ onStart, onPaid }: { onStart: (gameId: string, seed: number) => 
     <div className="flex aspect-[44/31] w-full max-h-full flex-col items-center justify-center gap-6 overflow-y-auto rounded-xl border border-kas/30 bg-[radial-gradient(ellipse_at_center,rgba(112,199,186,0.12),transparent_70%)] p-6 text-center">
       <h1 className="font-arcade text-2xl text-yellow-300 sm:text-4xl">KASMAN</h1>
       <p className="max-w-md text-white/70">
-        One entry = one game with 3 lives. Every entry adds {ENTRY_FEE_KAS} KAS to this month&apos;s pool. The top 3 verified scores share it.
+        One entry = one game with 3 lives. Every entry adds {ENTRY_FEE_KAS} {KAS_TICKER} to this month&apos;s pool. The top 3 verified scores share it.
       </p>
       {!wallet.address ? (
         <button
@@ -222,7 +223,7 @@ function Gate({ onStart, onPaid }: { onStart: (gameId: string, seed: number) => 
               : waitedMs > 4000
                 ? `CONFIRMING ON CHAIN... (${Math.round(waitedMs / 1000)}s)`
                 : "CONFIRMING..."
-            : `PAY ${ENTRY_FEE_KAS} KAS TO PLAY`}
+            : `PAY ${ENTRY_FEE_KAS} ${KAS_TICKER} TO PLAY`}
         </button>
       )}
       <p className="text-xs text-white/40">
