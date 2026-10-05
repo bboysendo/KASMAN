@@ -1,4 +1,3 @@
-import { KAS_TICKER } from "../lib/bonusTokens";
 import { FIRST_PLACE_NFT } from "../lib/prices";
 import NftThumb from "./NftThumb";
 
@@ -9,7 +8,8 @@ export default function FirstPlaceNft({ className = "" }: { className?: string }
       <div className="flex items-center justify-between gap-2">
         <p className="whitespace-nowrap text-xs uppercase tracking-widest text-yellow-300">1st Place Bonus</p>
         <span className="font-arcade whitespace-nowrap rounded-full border border-emerald-300/60 bg-emerald-300/15 px-2.5 py-1 text-[10px] text-emerald-300 shadow-[0_0_12px] shadow-emerald-300/30">
-          💰 ~{FIRST_PLACE_NFT.approxValue.toLocaleString("en-US")} {KAS_TICKER}
+          {/* Fixed "KAS", not the testnet ticker: the NFT is a real mainnet asset. */}
+          💰 ~{FIRST_PLACE_NFT.approxValue.toLocaleString("en-US")} KAS
         </span>
       </div>
       <NftThumb className="mt-3 aspect-square w-full" />
