@@ -28,8 +28,14 @@ export default function XHandleBadge({ onChanged }: { onChanged?: () => void }) 
       </div>
 
       {editing && (
-        <div role="dialog" aria-modal="true" aria-labelledby="x-handle-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-xl border border-kas/40 bg-[#0a1118] p-6">
+        <>
+          <div className="fixed inset-0 z-50 bg-black/70" aria-hidden="true" />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="x-handle-title"
+            className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-kas/40 bg-[#0a1118] p-6"
+          >
             <h2 id="x-handle-title" className="sr-only">Change X handle</h2>
             <XHandleForm
               current={xHandle}
@@ -40,7 +46,7 @@ export default function XHandleBadge({ onChanged }: { onChanged?: () => void }) 
               onCancel={() => setEditing(false)}
             />
           </div>
-        </div>
+        </>
       )}
     </>
   );

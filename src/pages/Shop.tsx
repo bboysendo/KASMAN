@@ -302,8 +302,14 @@ export default function Shop() {
       )}
 
       {confirming && (
-        <div role="dialog" aria-modal="true" aria-labelledby="buy-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-xl border border-kas/40 bg-[#0a1118] p-6">
+        <>
+          <div className="fixed inset-0 z-50 bg-black/70" aria-hidden="true" />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="buy-title"
+            className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-kas/40 bg-[#0a1118] p-6"
+          >
             <h2 id="buy-title" className="font-semibold">Buy {confirming.title}?</h2>
             <p className="mt-2 text-sm text-white/60">{confirming.price} {KAS_TICKER}, paid with KasWare to {confirming.to ?? "this month's prize pool contract"}.</p>
             {error && <p role="alert" className="mt-2 text-sm text-red-400">{error}</p>}
@@ -314,7 +320,7 @@ export default function Shop() {
               </button>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

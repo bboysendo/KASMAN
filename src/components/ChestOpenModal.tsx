@@ -58,8 +58,15 @@ export default function ChestOpenModal({ chestId, result, error, onClose }: Prop
   const color = CHEST_COLOR[chestId];
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`Opening ${chest.name}`} className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-      <div className="relative flex w-full max-w-sm flex-col items-center gap-5 py-6">
+    <>
+      <div className="fixed inset-0 z-50 bg-black/80" aria-hidden="true" />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Opening ${chest.name}`}
+        className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 overflow-y-auto"
+      >
+      <div className="relative flex w-full flex-col items-center gap-5 py-6">
         <h2 className="font-arcade text-sm uppercase" style={{ color }}>{chest.name}</h2>
 
         <div className="relative flex h-40 w-40 items-center justify-center">
@@ -145,6 +152,7 @@ export default function ChestOpenModal({ chestId, result, error, onClose }: Prop
           </>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

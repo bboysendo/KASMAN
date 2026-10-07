@@ -401,42 +401,22 @@ export default function GameCanvas({ seed, gameId, replay, resume, onGameOver }:
               </div>
             )}
             {replay && <span className="font-arcade absolute left-2 top-2 text-[10px] text-kas">REPLAY</span>}
-            {/* Floating touch potion bar: always available on a real touchscreen (independent of the
-             * movement control mode below), since swipe users still need a way to spend potions
-             * without a physical keyboard. Overlays the canvas so thumbs never leave the play area. */}
-            {isTouch && !replay && (
-              <div className="pointer-events-none absolute inset-x-0 bottom-1.5 flex justify-center gap-1.5 px-1">
-                {POTIONS.map((p) => {
-                  const used = usedOf(hud, p.id);
-                  const owned = ownedPotions[p.id];
-                  const hex = `#${p.color.toString(16).padStart(6, "0")}`;
-                  const disabled = hud.phase === "gameover" || owned <= 0 || used >= POTION_CAP[p.id];
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onPointerDown={(e) => {
-                        e.preventDefault();
-                        spendPotion(p.id);
-                      }}
-                      disabled={disabled}
-                      aria-label={`${p.name} (${owned} left)`}
-                      style={{ borderColor: hex, color: hex }}
-                      className="font-arcade pointer-events-auto flex size-10 shrink-0 touch-none select-none flex-col items-center justify-center gap-0.5 rounded-full border bg-black/60 text-[9px] backdrop-blur-sm active:bg-black/80 disabled:opacity-30"
-                    >
-                      <PotionIcon color={p.color} size={14} />
-                      <span className="text-white">{owned}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
           </div>
         </div>
 
-        {dpad && (
-          <div className="flex shrink-0 items-center justify-center">
-            <VirtualJoystick onDirChange={(d) => inputRef.current?.setTouchDir(d)} />
+        {/* Touch controls live beside/below the maze (never over it, so they never block the view):
+         * the joystick flanked by 3 potions on each side when it's on, or all 6 in a row for swipe-only. */}
+        {isTouch && !replay && (
+          <div className="flex shrink-0 items-center justify-center gap-3">
+            {dpad ? (
+              <>
+                <TouchPotionGroup potions={POTIONS.slice(0, 3)} hud={hud} ownedPotions={ownedPotions} onSpend={spendPotion} />
+                <VirtualJoystick onDirChange={(d) => inputRef.current?.setTouchDir(d)} />
+                <TouchPotionGroup potions={POTIONS.slice(3)} hud={hud} ownedPotions={ownedPotions} onSpend={spendPotion} />
+              </>
+            ) : (
+              <TouchPotionGroup potions={POTIONS} hud={hud} ownedPotions={ownedPotions} onSpend={spendPotion} />
+            )}
           </div>
         )}
       </div>
@@ -459,6 +439,47 @@ function MusicIcon({ muted }: { muted: boolean }) {
         </>
       )}
     </svg>
+  );
+}
+
+/**
+ * A column of up to 3 floating potion buttons for touch play, sized for a thumb. Lives beside the
+ * joystick (or alone, in a row, for swipe-only) instead of over the maze, so it never blocks the view.
+ */
+function TouchPotionGroup({
+  potions, hud, ownedPotions, onSpend,
+}: {
+  potions: readonly (typeof POTIONS)[number][];
+  hud: Hud;
+  ownedPotions: Record<PotionId, number>;
+  onSpend: (id: PotionId) => void;
+}) {
+  return (
+    <div className="flex shrink-0 flex-col items-center gap-1.5">
+      {potions.map((p) => {
+        const used = usedOf(hud, p.id);
+        const owned = ownedPotions[p.id];
+        const hex = `#${p.color.toString(16).padStart(6, "0")}`;
+        const disabled = hud.phase === "gameover" || owned <= 0 || used >= POTION_CAP[p.id];
+        return (
+          <button
+            key={p.id}
+            type="button"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onSpend(p.id);
+            }}
+            disabled={disabled}
+            aria-label={`${p.name} (${owned} left)`}
+            style={{ borderColor: hex, color: hex }}
+            className="font-arcade flex size-10 shrink-0 touch-none select-none flex-col items-center justify-center gap-0.5 rounded-full border bg-black/60 text-[9px] backdrop-blur-sm active:bg-black/80 disabled:opacity-30"
+          >
+            <PotionIcon color={p.color} size={14} />
+            <span className="text-white">{owned}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
