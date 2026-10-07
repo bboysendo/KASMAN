@@ -8,6 +8,7 @@ import Pvp from "./pages/Pvp";
 import Quests from "./pages/Quests";
 import Shop from "./pages/Shop";
 import Staking from "./pages/Staking";
+import Tokenomics from "./pages/Tokenomics";
 import WalletButton from "./components/WalletButton";
 import { disconnectWallet, getAccount } from "./lib/leaderboard";
 import { KASMAN_X_URL } from "./lib/prices";
@@ -26,6 +27,7 @@ const NAV: { to: string; label: string; badge?: string }[] = [
   { to: "/shop", label: "Shop" },
   { to: "/quests", label: "Quests" },
   { to: "/staking", label: "Staking" },
+  { to: "/tokenomics", label: "Tokenomics" },
 ];
 
 export default function App() {
@@ -97,6 +99,7 @@ export default function App() {
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/quests" element={<Quests />} />
             <Route path="/staking" element={<Staking />} />
+            <Route path="/tokenomics" element={<Tokenomics />} />
             <Route path="*" element={<Home />} />
           </Routes>
         </main>
