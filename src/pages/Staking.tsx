@@ -4,13 +4,16 @@ import kasmanPng from "../assets/kasman.png";
 import { checkIn, claim, daaToMs, holdings, onchainReady, rewardTimes, setStaked, virtualDaa, type Holdings, type Owned } from "../lib/chain";
 import { LOCKED, config, type Nft } from "../lib/covenant";
 import { requestFreeGames } from "../lib/leaderboard";
-import { DAILY_REWARD, ENTRY_FEE_KAS, NFT_PRICE_KAS, RARITIES, rarityOf } from "../lib/prices";
+import { DAILY_REWARD, ENTRY_FEE_KAS, RARITIES, rarityOf } from "../lib/prices";
 import { useWallet } from "../lib/useWallet";
 import { useStore } from "../store";
 
 const button = "rounded-lg bg-kas px-4 py-2 text-sm font-semibold text-black hover:brightness-110 disabled:opacity-50";
 const outline = "rounded-lg border border-kas/50 px-4 py-2 text-sm hover:bg-kas/10 disabled:opacity-50";
-const KASPACOM_URL = "https://kaspa.com";
+const section = "flex items-center gap-3 font-semibold after:h-px after:flex-1 after:bg-linear-to-r after:from-kas/60 after:to-transparent";
+const stat = "rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3";
+const statLabel = "text-xs uppercase tracking-wide text-white/40";
+const statValue = "mt-1 font-arcade text-lg text-kas";
 
 /** KASMAN (whole tokens) a record's points are worth: points are tenths of the daily reward. */
 const pointsToKasman = (points: number) => (points * DAILY_REWARD) / 10;
@@ -90,58 +93,72 @@ export default function Staking() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
       <h1 className="font-arcade text-xl text-yellow-300 sm:text-2xl">STAKING</h1>
-      <p className="mt-4 text-white/60">
-        Stake your Kasman NFT to get free games every day, a bigger KASMAN multiplier and shorter waits between reward
-        claims. Every player earns KASMAN for each day they play; a staked NFT boosts it by rarity.
+      <p className="mt-4 max-w-2xl text-white/60">
+        Stake your Kasman NFT to turn it into a daily <span className="font-semibold text-kas">$KASM</span> rewards
+        machine — plus free games and shorter claim waits. Every player earns $KASM for each day they play; staking
+        boosts it, and how much depends on your NFT's rarity tier.
       </p>
 
-      <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="flex w-full max-w-56 shrink-0 flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-          <div className="flex aspect-square items-center justify-center rounded-lg bg-linear-to-br from-kas/30 via-black to-purple-900/40">
-            <img src={kasmanPng} alt="Kasman NFT" className="w-1/2" />
-          </div>
-          <h2 className="font-semibold">Kasman NFT</h2>
-          <p className="text-xs text-white/60">Collection size: 350 NFTs. Rarity is determined by the NFT token ID.</p>
-          <a href={KASPACOM_URL} target="_blank" rel="noopener noreferrer" className={`${outline} text-center`}>
-            Mint for {NFT_PRICE_KAS} KAS on KaspaCom
-          </a>
+      <div className="mt-6 flex items-start gap-4 rounded-2xl border border-kas/30 bg-linear-to-br from-kas/10 via-black to-purple-900/20 p-5 sm:items-center">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-kas/15 font-arcade text-base text-kas">$</div>
+        <div>
+          <h2 className="font-semibold">Direct $KASM rewards, scaled by rarity</h2>
+          <p className="mt-1 text-sm text-white/60">
+            Staking a Kasman NFT raises your daily $KASM multiplier and shortens the wait between claims — higher
+            rarity means a bigger multiplier, more free games and faster claims. See the full breakdown below.
+          </p>
         </div>
+      </div>
 
-        <div className="min-w-0 flex-1 overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="text-white/50">
-              <tr>
-                <th className="py-2 pr-4 font-normal">Rarity</th>
-                <th className="py-2 pr-4 font-normal">NFT #</th>
-                <th className="py-2 pr-4 font-normal">Free games / day</th>
-                <th className="py-2 pr-4 font-normal">Token multiplier</th>
-                <th className="py-2 font-normal">Claim every</th>
+      <div className="mt-6 overflow-x-auto rounded-xl border border-white/10 bg-white/[0.03]">
+        <table className="w-full text-left text-sm">
+          <thead className="text-white/50">
+            <tr>
+              <th className="py-3 pr-4 pl-4 font-normal">Rarity</th>
+              <th className="py-3 pr-4 font-normal">NFT #</th>
+              <th className="py-3 pr-4 font-normal">Free games / day</th>
+              <th className="py-3 pr-4 font-normal">$KASM multiplier</th>
+              <th className="py-3 pr-4 font-normal">Claim every</th>
+            </tr>
+          </thead>
+          <tbody>
+            {RARITIES.map((r, i) => (
+              <tr key={r.id} className="border-t border-white/10">
+                <td className="py-2 pr-4 pl-4 font-semibold">{r.name}</td>
+                <td className="py-2 pr-4 text-white/60">{i === 0 ? "-" : `${RARITIES[i - 1].maxTokenId + 1}-${r.maxTokenId}`}</td>
+                <td className="py-2 pr-4">{r.freeGames === 0 ? `0 (pay ${ENTRY_FEE_KAS} KAS)` : r.freeGames}</td>
+                <td className="py-2 pr-4 text-kas">{(r.mult / 10).toFixed(1)}x</td>
+                <td className="py-2 pr-4">{r.claimEveryHours > 48 ? `${r.claimEveryHours / 24} days` : `${r.claimEveryHours} h`}</td>
               </tr>
-            </thead>
-            <tbody>
-              {RARITIES.map((r, i) => (
-                <tr key={r.id} className="border-t border-white/10">
-                  <td className="py-2 pr-4 font-semibold">{r.name}</td>
-                  <td className="py-2 pr-4 text-white/60">{i === 0 ? "-" : `${RARITIES[i - 1].maxTokenId + 1}-${r.maxTokenId}`}</td>
-                  <td className="py-2 pr-4">{r.freeGames === 0 ? `0 (pay ${ENTRY_FEE_KAS} KAS)` : r.freeGames}</td>
-                  <td className="py-2 pr-4 text-kas">{(r.mult / 10).toFixed(1)}x</td>
-                  <td className="py-2">{r.claimEveryHours > 48 ? `${r.claimEveryHours / 24} days` : `${r.claimEveryHours} h`}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {(error || notice) && (
         <p role={error ? "alert" : "status"} className={`mt-6 text-sm ${error ? "text-red-400" : "text-kas"}`}>{error || notice}</p>
       )}
 
-      <h2 className="mt-10 flex items-center gap-3 font-semibold after:h-px after:flex-1 after:bg-linear-to-r after:from-kas/60 after:to-transparent">
-        Your Staked NFT
-      </h2>
+      <h2 className={`mt-10 ${section}`}>Your Staked NFT</h2>
       {!onchainReady ? (
-        <p className="mt-4 text-sm text-white/50">The Kasman NFT collection is not live yet.</p>
+        <div className="mt-4 flex flex-col gap-3">
+          <p className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/50">
+            <span aria-hidden="true">⏳</span> Staking activates on-chain soon — controls below are a preview.
+          </p>
+          <div className="flex w-56 flex-col gap-2 rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-3 opacity-60">
+            <div className="flex aspect-square items-center justify-center rounded-lg bg-linear-to-br from-kas/20 via-black to-purple-900/30">
+              <img src={kasmanPng} alt="Kasman NFT" className="w-1/2 grayscale" />
+            </div>
+            <h3 className="text-sm font-semibold">Kasman #—</h3>
+            <p className="text-xs text-white/60">Free games/day · Multiplier · Claim window</p>
+            <button type="button" disabled className={button} title="Live once the Kasman NFT collection deploys">
+              Stake
+            </button>
+            <button type="button" disabled className={outline} title="Live once the Kasman NFT collection deploys">
+              Withdraw
+            </button>
+          </div>
+        </div>
       ) : !wallet.address ? (
         <div className="mt-4 flex items-center gap-3">
           <p className="text-sm text-white/50">Connect your wallet to see your NFT and its active perks.</p>
@@ -153,26 +170,28 @@ export default function Staking() {
         <p className="mt-4 text-sm text-white/50">{error ? "" : "Reading the Kaspa network..."}</p>
       ) : chain.h.nfts.length === 0 ? (
         <p className="mt-4 text-sm text-white/50">
-          No Kasman NFT yet. Mint one at{" "}
-          <a href={KASPACOM_URL} target="_blank" rel="noopener noreferrer" className="text-kas hover:underline">KaspaCom</a>{" "}
-          and come back to stake it for free daily games and bigger rewards.
+          No Kasman NFT in your wallet yet. Get one to unlock staking and its $KASM rewards boost.
         </p>
       ) : stakedNft ? (
         (() => {
           const rarity = rarityOf(stakedNft.state.tokenId);
           return (
-            <div className="mt-4 flex w-56 flex-col gap-2 rounded-xl border border-kas bg-kas/5 p-3">
+            <div className="mt-4 flex w-64 flex-col gap-3 rounded-xl border border-kas bg-linear-to-b from-kas/10 to-transparent p-4 shadow-[0_0_30px_-12px_var(--color-kas)]">
               <div className="flex aspect-square items-center justify-center rounded-lg bg-linear-to-br from-kas/30 via-black to-purple-900/40">
                 <img src={kasmanPng} alt={`Kasman #${stakedNft.state.tokenId}`} className="w-1/2" />
               </div>
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-sm font-semibold">Kasman #{stakedNft.state.tokenId}</h3>
-                <span className="font-arcade text-[10px] text-yellow-300">{rarity.name}</span>
+                <span className="rounded-full bg-yellow-300/15 px-2 py-0.5 font-arcade text-[10px] text-yellow-300">{rarity.name}</span>
               </div>
-              <p className="text-xs text-white/60">
-                Staked · {rarity.freeGames} free/day · {(rarity.mult / 10).toFixed(1)}x multiplier ·{" "}
-                claim every {rarity.claimEveryHours > 48 ? `${rarity.claimEveryHours / 24}d` : `${rarity.claimEveryHours}h`}
-              </p>
+              <div className="flex flex-wrap gap-1.5 text-[11px]">
+                <span className="rounded-full bg-kas/10 px-2 py-0.5 text-kas">Staked</span>
+                <span className="rounded-full bg-white/5 px-2 py-0.5 text-white/60">{rarity.freeGames} free/day</span>
+                <span className="rounded-full bg-white/5 px-2 py-0.5 text-white/60">{(rarity.mult / 10).toFixed(1)}x $KASM</span>
+                <span className="rounded-full bg-white/5 px-2 py-0.5 text-white/60">
+                  claim every {rarity.claimEveryHours > 48 ? `${rarity.claimEveryHours / 24}d` : `${rarity.claimEveryHours}h`}
+                </span>
+              </div>
               <button
                 type="button"
                 disabled={!!busy || !dayReady || !nftReady(stakedNft)}
@@ -190,19 +209,19 @@ export default function Staking() {
               <button
                 type="button"
                 disabled={!!busy}
-                onClick={() => act(`stake-${stakedNft.state.tokenId}`, async () => (await setStaked(wallet.address!, stakedNft, false), "NFT unstaked."))}
+                onClick={() => act(`stake-${stakedNft.state.tokenId}`, async () => (await setStaked(wallet.address!, stakedNft, false), "NFT withdrawn from staking."))}
                 className={outline}
               >
-                {busy === `stake-${stakedNft.state.tokenId}` ? "Confirming..." : "Unstake NFT"}
+                {busy === `stake-${stakedNft.state.tokenId}` ? "Confirming..." : "Withdraw"}
               </button>
             </div>
           );
         })()
       ) : (
         <div className="mt-4 flex flex-col gap-3">
-          <div className="flex w-56 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-6 text-center">
+          <div className="flex w-64 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-6 text-center">
             <span aria-hidden="true" className="text-3xl text-white/20">?</span>
-            <p className="text-xs text-white/50">No NFT staked. Stake one from your wallet for free daily games and a KASMAN multiplier.</p>
+            <p className="text-xs text-white/50">No NFT staked. Stake one from your wallet for free daily games and a $KASM multiplier.</p>
             <button type="button" onClick={() => setPicking((p) => !p)} className={button}>
               Stake an NFT from your Wallet
             </button>
@@ -212,17 +231,18 @@ export default function Staking() {
               {unstakedNfts.map((n) => {
                 const rarity = rarityOf(n.state.tokenId);
                 return (
-                  <li key={n.state.tokenId} className="flex w-56 flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                  <li key={n.state.tokenId} className="flex w-64 flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
                     <div className="flex aspect-square items-center justify-center rounded-lg bg-linear-to-br from-kas/30 via-black to-purple-900/40">
                       <img src={kasmanPng} alt={`Kasman #${n.state.tokenId}`} className="w-1/2" />
                     </div>
                     <div className="flex items-baseline justify-between gap-2">
                       <h3 className="text-sm font-semibold">Kasman #{n.state.tokenId}</h3>
-                      <span className="font-arcade text-[10px] text-yellow-300">{rarity.name}</span>
+                      <span className="rounded-full bg-yellow-300/15 px-2 py-0.5 font-arcade text-[10px] text-yellow-300">{rarity.name}</span>
                     </div>
-                    <p className="text-xs text-white/60">
-                      {rarity.freeGames} free/day · {(rarity.mult / 10).toFixed(1)}x
-                    </p>
+                    <div className="flex flex-wrap gap-1.5 text-[11px]">
+                      <span className="rounded-full bg-white/5 px-2 py-0.5 text-white/60">{rarity.freeGames} free/day</span>
+                      <span className="rounded-full bg-white/5 px-2 py-0.5 text-white/60">{(rarity.mult / 10).toFixed(1)}x $KASM</span>
+                    </div>
                     <button
                       type="button"
                       disabled={!!busy}
@@ -239,23 +259,38 @@ export default function Staking() {
         </div>
       )}
 
-      <h2 className="mt-10 flex items-center gap-3 font-semibold after:h-px after:flex-1 after:bg-linear-to-r after:from-kas/60 after:to-transparent">
-        Pending $KASM Rewards
-      </h2>
+      <h2 className={`mt-10 ${section}`}>Pending $KASM Rewards</h2>
       {!onchainReady ? (
-        <p className="mt-4 text-sm text-white/50">KASMAN rewards start when the rewards contract goes live.</p>
+        <div className="mt-4 flex flex-col gap-3">
+          <p className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/50">
+            <span aria-hidden="true">⏳</span> $KASM rewards start once the rewards contract goes live — preview below.
+          </p>
+          <div className="flex flex-wrap items-center gap-6 rounded-xl border border-white/10 bg-white/[0.03] p-4 opacity-60">
+            <div className={stat}>
+              <p className={statLabel}>$KASM to claim</p>
+              <p className={statValue}>0</p>
+            </div>
+            <div className={stat}>
+              <p className={statLabel}>Active multiplier</p>
+              <p className={statValue}>1.0x</p>
+            </div>
+            <button type="button" disabled className={`ml-auto ${button}`} title="Live once the rewards contract deploys">
+              Claim Rewards
+            </button>
+          </div>
+        </div>
       ) : !wallet.address ? (
         <p className="mt-4 text-sm text-white/50">Connect your wallet to see your pending rewards.</p>
       ) : !chain ? null : (
         <>
           <div className="mt-4 flex flex-wrap items-center gap-6 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-            <div>
-              <p className="font-arcade text-yellow-300">{pointsToKasman(record?.state.points ?? 0).toLocaleString("en-US")}</p>
-              <p className="text-sm text-white/60">KASMAN to claim</p>
+            <div className={stat}>
+              <p className={statLabel}>$KASM to claim</p>
+              <p className={statValue}>{pointsToKasman(record?.state.points ?? 0).toLocaleString("en-US")}</p>
             </div>
-            <div>
-              <p className="font-arcade text-kas">{(rarityOf(stakedNft?.state.tokenId ?? null).mult / 10).toFixed(1)}x</p>
-              <p className="text-sm text-white/60">Active multiplier</p>
+            <div className={stat}>
+              <p className={statLabel}>Active multiplier</p>
+              <p className={statValue}>{(rarityOf(stakedNft?.state.tokenId ?? null).mult / 10).toFixed(1)}x</p>
             </div>
             <button
               type="button"
