@@ -33,6 +33,7 @@ export const BONUS_TOKENS: Record<string, BonusToken[]> = {
   "2026-10": [
     { symbol: "KASPI", amount: 2000, icon: "/assets/kaspi.png", tokenId: "2629ae955c5874c80d90526ba91f40a4ee52e427494fdd5e45a5d8ee9eb0c33a" },
     { symbol: "KASDIA", amount: 500, icon: "/assets/kasdia.png", tokenId: "77e9fa3da69ce63302accbc28814d9de155dcfe03bb97cc0f2dd3d2ccebfce0" },
+    { symbol: "KASDISTRO", amount: 50, icon: "/assets/icons/kadistro200.jpg" },
   ],
 };
 

@@ -164,7 +164,9 @@ export default function Inventory() {
         </div>
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
           <p className="text-xs uppercase tracking-widest text-white/50">#1 this month</p>
-          <p className="font-arcade mt-2 text-2xl text-kas">{leader ? leader.name || shortAddress(leader.address) : "—"}</p>
+          <p className="font-arcade mt-2 text-2xl text-kas">
+            {leader ? (leader.xHandle ? `@${leader.xHandle}` : leader.name) || shortAddress(leader.address) : "—"}
+          </p>
         </div>
       </div>
       <p className="mt-3 text-sm text-white/50">
