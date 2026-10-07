@@ -97,6 +97,14 @@ export function createInput(surface: HTMLElement, opts: InputOptions) {
   window.addEventListener("pointerup", onUp);
   window.addEventListener("pointercancel", onUp);
 
+  // Virtual joystick: acts like a held key (continuously retried at junctions) until released.
+  let touchHeld = NONE;
+  const setTouchDir = (dir: number) => {
+    if (dir === touchHeld) return;
+    if (dir !== NONE) press(dir);
+    touchHeld = dir;
+  };
+
   let lastPadDir = NONE;
   let lastPause = false;
   function pollGamepad() {
@@ -117,7 +125,8 @@ export function createInput(surface: HTMLElement, opts: InputOptions) {
 
   return {
     press,
-    held: () => heldKeys.at(-1) ?? lastPadDir,
+    setTouchDir,
+    held: () => heldKeys.at(-1) ?? (touchHeld !== NONE ? touchHeld : lastPadDir),
     poll() {
       pollGamepad();
       const dir = pending;
@@ -132,6 +141,7 @@ export function createInput(surface: HTMLElement, opts: InputOptions) {
       surface.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
+      touchHeld = NONE;
     },
   };
 }

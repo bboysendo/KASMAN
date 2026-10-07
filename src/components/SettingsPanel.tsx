@@ -68,7 +68,7 @@ export default function SettingsPanel({ compact = false }: { compact?: boolean }
             value={settings.mobileControls}
             onChange={(e) => set({ mobileControls: e.target.value as "swipe" | "buttons" })}
           >
-            <option value="buttons">D-pad + swipe</option>
+            <option value="buttons">Joystick + swipe</option>
             <option value="swipe">Swipe only</option>
           </select>
         </label>

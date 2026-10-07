@@ -9,6 +9,7 @@ import { createRecorder, simulateReplay, type Replay } from "../game/engine/repl
 import { createInput, type Input } from "../game/input";
 import { PixiRenderer, snapshot } from "../game/render/PixiRenderer";
 import { getSkin } from "../game/render/skins";
+import { useIsTouchDevice } from "../lib/device";
 import { POTIONS, type PotionId } from "../lib/prices";
 import KasmanIcon from "./KasmanIcon";
 import PotionIcon from "./PotionIcon";
@@ -96,6 +97,7 @@ export default function GameCanvas({ seed, gameId, replay, resume, onGameOver }:
   });
   const [paused, setPaused] = useState(!!resume);
   const [announcement, setAnnouncement] = useState("");
+  const isTouch = useIsTouchDevice();
   const settings = useStore((s) => s.settings);
   const setSettings = useStore((s) => s.setSettings);
   const skinId = useStore((s) => s.equippedSkin);
@@ -334,7 +336,7 @@ export default function GameCanvas({ seed, gameId, replay, resume, onGameOver }:
             title={livesMaxed ? `Limit reached: ${MAX_BOUGHT_LIVES} extra lives per game` : `Up to ${MAX_BOUGHT_LIVES} extra lives per game (${hud.livesBought} used)`}
             className="flex shrink-0 items-center gap-1 rounded border border-yellow-300/50 px-1 py-0.5 text-yellow-300 hover:bg-yellow-300/10 disabled:opacity-40"
           >
-            <span className="rounded bg-white/10 px-1 text-white">{keyLabel(settings.keymap.life)}</span>
+            {!isTouch && <span className="rounded bg-white/10 px-1 text-white">{keyLabel(settings.keymap.life)}</span>}
             {livesMaxed ? "MAX LIVES" : `+1 (${extraLives})`}
           </button>
         )}
@@ -376,7 +378,7 @@ export default function GameCanvas({ seed, gameId, replay, resume, onGameOver }:
                 className="flex items-center justify-center gap-0.5 rounded border py-0.5 disabled:opacity-30"
               >
                 <PotionIcon color={p.color} size={12} />
-                <span className="rounded bg-white/10 px-1 text-white">{keyLabel(settings.keymap[p.id])}</span>
+                {!isTouch && <span className="rounded bg-white/10 px-1 text-white">{keyLabel(settings.keymap[p.id])}</span>}
                 {owned}
               </button>
             );
@@ -399,12 +401,42 @@ export default function GameCanvas({ seed, gameId, replay, resume, onGameOver }:
               </div>
             )}
             {replay && <span className="font-arcade absolute left-2 top-2 text-[10px] text-kas">REPLAY</span>}
+            {/* Floating touch potion bar: always available on a real touchscreen (independent of the
+             * movement control mode below), since swipe users still need a way to spend potions
+             * without a physical keyboard. Overlays the canvas so thumbs never leave the play area. */}
+            {isTouch && !replay && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-1.5 flex justify-center gap-1.5 px-1">
+                {POTIONS.map((p) => {
+                  const used = usedOf(hud, p.id);
+                  const owned = ownedPotions[p.id];
+                  const hex = `#${p.color.toString(16).padStart(6, "0")}`;
+                  const disabled = hud.phase === "gameover" || owned <= 0 || used >= POTION_CAP[p.id];
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        spendPotion(p.id);
+                      }}
+                      disabled={disabled}
+                      aria-label={`${p.name} (${owned} left)`}
+                      style={{ borderColor: hex, color: hex }}
+                      className="font-arcade pointer-events-auto flex size-10 shrink-0 touch-none select-none flex-col items-center justify-center gap-0.5 rounded-full border bg-black/60 text-[9px] backdrop-blur-sm active:bg-black/80 disabled:opacity-30"
+                    >
+                      <PotionIcon color={p.color} size={14} />
+                      <span className="text-white">{owned}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
         {dpad && (
           <div className="flex shrink-0 items-center justify-center">
-            <DPad onPress={(d) => inputRef.current?.press(d)} />
+            <VirtualJoystick onDirChange={(d) => inputRef.current?.setTouchDir(d)} />
           </div>
         )}
       </div>
@@ -430,26 +462,73 @@ function MusicIcon({ muted }: { muted: boolean }) {
   );
 }
 
-function DPad({ onPress }: { onPress: (dir: number) => void }) {
-  const btn = (dir: number, label: string, area: string) => (
-    <button
-      type="button"
-      aria-label={label}
+/** Radius (px) the knob can travel from center before clamping. */
+const JOYSTICK_RADIUS = 36;
+/** Minimum drag distance before a direction registers, so small thumb tremor near center doesn't turn Kasman. */
+const JOYSTICK_DEADZONE = 10;
+
+/**
+ * Fluid virtual joystick: the knob follows the thumb anywhere inside (and clamped at the edge of) the
+ * base, and the nearest of the 4 cardinal directions is reported continuously — like a held key — so
+ * Kasman keeps retrying the turn at the next junction instead of needing a fresh tap per direction.
+ */
+function VirtualJoystick({ onDirChange }: { onDirChange: (dir: number) => void }) {
+  const baseRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const dirRef = useRef(NONE);
+  const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+
+  const updateFromPoint = (clientX: number, clientY: number) => {
+    const rect = baseRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dx = clientX - (rect.left + rect.width / 2);
+    const dy = clientY - (rect.top + rect.height / 2);
+    const dist = Math.hypot(dx, dy);
+    const clamped = Math.min(dist, JOYSTICK_RADIUS);
+    setKnob(dist > 0 ? { x: (dx / dist) * clamped, y: (dy / dist) * clamped } : { x: 0, y: 0 });
+
+    const dir = dist < JOYSTICK_DEADZONE ? NONE : Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? RIGHT : LEFT) : dy > 0 ? DOWN : UP;
+    if (dir !== dirRef.current) {
+      dirRef.current = dir;
+      onDirChange(dir);
+    }
+  };
+
+  const release = () => {
+    draggingRef.current = false;
+    setDragging(false);
+    setKnob({ x: 0, y: 0 });
+    if (dirRef.current !== NONE) {
+      dirRef.current = NONE;
+      onDirChange(NONE);
+    }
+  };
+
+  return (
+    <div
+      ref={baseRef}
+      role="group"
+      aria-label="Movement joystick"
       onPointerDown={(e) => {
         e.preventDefault();
-        onPress(dir);
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        draggingRef.current = true;
+        setDragging(true);
+        updateFromPoint(e.clientX, e.clientY);
       }}
-      className={`${area} flex size-14 touch-none sm:size-16 select-none items-center justify-center rounded-2xl border border-kas/40 bg-white/5 text-2xl active:bg-kas/30`}
+      onPointerMove={(e) => {
+        if (!draggingRef.current) return;
+        updateFromPoint(e.clientX, e.clientY);
+      }}
+      onPointerUp={release}
+      onPointerCancel={release}
+      className="relative hidden size-24 shrink-0 touch-none select-none items-center justify-center rounded-full border border-kas/40 bg-white/5 pointer-coarse:flex sm:size-28"
     >
-      {{ [UP]: "▲", [LEFT]: "◀", [DOWN]: "▼", [RIGHT]: "▶" }[dir]}
-    </button>
-  );
-  return (
-    <div className="hidden shrink-0 grid-cols-3 gap-2 pointer-coarse:grid">
-      {btn(UP, "Up", "col-start-2 row-start-1")}
-      {btn(LEFT, "Left", "col-start-1 row-start-2")}
-      {btn(RIGHT, "Right", "col-start-3 row-start-2")}
-      {btn(DOWN, "Down", "col-start-2 row-start-3")}
+      <div
+        className="pointer-events-none size-11 rounded-full bg-kas/70 shadow-[0_0_14px_2px] shadow-kas/50 sm:size-12"
+        style={{ transform: `translate(${knob.x}px, ${knob.y}px)`, transition: dragging ? "none" : "transform 120ms ease-out" }}
+      />
     </div>
   );
 }
