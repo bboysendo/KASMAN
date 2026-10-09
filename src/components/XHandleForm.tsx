@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { setXHandle } from "../lib/leaderboard";
+import { X_HANDLE_RE } from "../lib/prices";
 import { useStore } from "../store";
 
 /**
@@ -16,10 +17,15 @@ export default function XHandleForm({ current, onDone, onCancel }: { current?: s
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const handle = value.trim().replace(/^@/, "");
+    if (!X_HANDLE_RE.test(handle)) {
+      setError("Enter a valid X handle: up to 15 letters, digits or underscores, no spaces.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
-      syncAccount(await setXHandle(value));
+      syncAccount(await setXHandle(handle));
       onDone?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save your X handle");
@@ -46,9 +52,11 @@ export default function XHandleForm({ current, onDone, onCancel }: { current?: s
           className="w-full bg-transparent text-center outline-none"
         />
       </div>
-      <p className="text-xs text-yellow-300/90">
-        ⚠️ Your X handle must be real and reachable. Otherwise you won&apos;t receive the Prize Pool or the matching NFT if you win. (Staking $KASM
-        rewards can still be claimed either way.)
+      <p className="text-center text-xs leading-relaxed text-yellow-300/90">
+        ⚠️ Your X handle must be real and reachable. Winners will be contacted directly via DM to this profile before sending out the Monthly Prize
+        Pool or matching NFTs. Fake or unreachable handles will forfeit their rewards.
+        <br />
+        <span className="text-white/40">(Staking $KASM rewards can still be claimed either way.)</span>
       </p>
       <div className="flex w-full gap-3">
         {onCancel && (

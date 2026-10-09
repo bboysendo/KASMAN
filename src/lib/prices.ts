@@ -108,7 +108,7 @@ export const today = (d = new Date()) => d.toISOString().slice(0, 10);
 
 /** Kasman's official accounts. Placeholders until the real handles are set. */
 export const KASMAN_X_URL = "https://x.com/KasmanGame";
-export const KASMAN_TELEGRAM_URL = "https://t.me/KasmanGame";
+export const BBOYSENDO_X_URL = "https://x.com/BboySendo";
 
 /** X handle rules: 1-15 letters, digits or underscores, no leading '@'. */
 export const X_HANDLE_RE = /^\w{1,15}$/;
@@ -144,8 +144,9 @@ export function prizeSplit(pool: number) {
 export const FIRST_PLACE_NFT = { name: "NEURAL KEY Society #151", url: "https://kaspa.com/nft/collections/NEURALKEY/151", approxValue: 2000 };
 
 /**
- * Social Quests (Play "Quests" tab): simple one-time tasks, rewarded once per wallet after the
- * player registers an X handle. Self-reported for now (no X API to verify follows/reposts).
+ * Social Quests (Play "Quests" tab): simple one-time tasks, each rewarding 1 Extra Life once per
+ * wallet after the player registers an X handle. Self-reported for now (no X API to verify
+ * follows/reposts). Lives are credited the same way as bought life packs (`kind: "lives"`).
  */
 export const QUESTS = [
   {
@@ -153,24 +154,24 @@ export const QUESTS = [
     title: "Follow @KasmanGame on X",
     desc: "Follow the official Kasman account on X.",
     url: KASMAN_X_URL,
-    reward: { kind: "potion", item: "shield", qty: 1 },
-    rewardLabel: "1 Ghost Shield potion",
+    reward: { kind: "lives", item: "", qty: 1 },
+    rewardLabel: "1 Extra Life",
   },
   {
     id: "repost-pinned",
     title: "Repost the pinned post",
     desc: "Repost the pinned announcement on the Kasman X account.",
     url: KASMAN_X_URL,
-    reward: { kind: "potion", item: "freeze", qty: 1 },
-    rewardLabel: "1 Ghost Freeze potion",
+    reward: { kind: "lives", item: "", qty: 1 },
+    rewardLabel: "1 Extra Life",
   },
   {
-    id: "join-telegram",
-    title: "Join the Telegram",
-    desc: "Join the Kasman community on Telegram.",
-    url: KASMAN_TELEGRAM_URL,
-    reward: { kind: "ticket", item: "", qty: 1 },
-    rewardLabel: "1 free entry ticket",
+    id: "follow-bboysendo",
+    title: "Follow @BboySendo on X",
+    desc: "Follow the personal X account of BboySendo.",
+    url: BBOYSENDO_X_URL,
+    reward: { kind: "lives", item: "", qty: 1 },
+    rewardLabel: "1 Extra Life",
   },
 ] as const;
 export type QuestId = (typeof QUESTS)[number]["id"];

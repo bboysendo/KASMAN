@@ -334,10 +334,15 @@ describe("worker", () => {
     const claimed = await call("/quest/claim", { quest: QUESTS[0].id });
     expect(claimed.status).toBe(200);
     expect(claimed.data.quests).toContain(QUESTS[0].id);
-    if (QUESTS[0].reward.kind === "ticket") expect(claimed.data.tickets).toBe(before.tickets + QUESTS[0].reward.qty);
+    expect(claimed.data.lives).toBe(before.lives + 1);
 
     // Claiming the same quest again does nothing more.
     expect((await call("/quest/claim", { quest: QUESTS[0].id })).data).toMatchObject({ error: "Quest already claimed" });
+  });
+
+  it("gives every Social Quest 1 Extra Life", () => {
+    expect(QUESTS.map((q) => q.id)).toEqual(["follow-x", "repost-pinned", "follow-bboysendo"]);
+    for (const quest of QUESTS) expect(quest.reward).toMatchObject({ kind: "lives", qty: 1 });
   });
 
   it("sums every game into one leaderboard row", async () => {
