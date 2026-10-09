@@ -63,18 +63,23 @@ export default function App() {
     <BrowserRouter>
       <div className="flex min-h-dvh flex-col">
         <header ref={headerRef} className="sticky top-0 z-40 short:static border-b border-white/10 bg-night/80 backdrop-blur">
-          <nav className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-3 sm:gap-6">
-            <NavLink to="/" className="font-arcade flex shrink-0 items-center gap-2 text-base leading-none text-yellow-300">
+          <nav className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-4 py-3 sm:flex-nowrap sm:gap-6">
+            <NavLink to="/" className="font-arcade order-1 flex shrink-0 items-center gap-2 text-base leading-none text-yellow-300">
               <img src={kasmanPng} alt="" className="size-8 object-contain" />
               <span className="hidden translate-y-0.5 sm:inline">KASMAN</span>
             </NavLink>
-            <ul className="ml-auto flex text-xs sm:gap-4 sm:text-sm">
+            <div className="order-2 ml-auto sm:order-3 sm:ml-0">
+              <WalletButton />
+            </div>
+            <ul className="order-3 mt-2 grid w-full grid-cols-3 gap-2 text-sm sm:order-2 sm:ml-auto sm:mt-0 sm:flex sm:w-auto sm:gap-4">
               {NAV.map((n) => (
                 <li key={n.to}>
                   <NavLink
                     to={n.to}
                     end
-                    className={({ isActive }) => `relative rounded px-1 py-1 sm:px-2 ${isActive ? "text-kas" : "text-white/70 hover:text-white"}`}
+                    className={({ isActive }) =>
+                      `relative flex items-center justify-center rounded-lg border border-white/15 bg-white/[0.04] px-2 py-2 text-center leading-tight sm:border-0 sm:bg-transparent sm:px-2 sm:py-1 sm:text-sm ${isActive ? "text-kas sm:text-kas" : "text-white/70 hover:text-white"}`
+                    }
                   >
                     {n.label}
                     {n.badge && (
@@ -86,7 +91,6 @@ export default function App() {
                 </li>
               ))}
             </ul>
-            <WalletButton />
           </nav>
         </header>
         <main className="flex-1">
