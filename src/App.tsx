@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { BrowserRouter, NavLink, Route, Routes } from "react-router";
 import kasmanPng from "./assets/kasman.png";
 import Home from "./pages/Home";
@@ -31,6 +31,9 @@ const NAV: { to: string; label: string; badge?: string }[] = [
 ];
 
 export default function App() {
+  // Mobile only: the nav grid starts collapsed behind the "KASMAN MENU" toggle (sm+ always shows it).
+  const [menuOpen, setMenuOpen] = useState(false);
+
   // Tickets, lives and skins live on the server; refresh the local copy once per visit.
   useEffect(() => {
     const { syncAccount } = useStore.getState();
@@ -64,19 +67,34 @@ export default function App() {
       <div className="flex min-h-dvh flex-col">
         <header ref={headerRef} className="sticky top-0 z-40 short:static border-b border-white/10 bg-night/80 backdrop-blur">
           <nav className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-4 py-3 sm:flex-nowrap sm:gap-6">
-            <NavLink to="/" className="font-arcade order-1 flex shrink-0 items-center gap-2 text-base leading-none text-yellow-300">
-              <img src={kasmanPng} alt="" className="size-8 object-contain" />
-              <span className="hidden translate-y-0.5 sm:inline">KASMAN</span>
-            </NavLink>
+            <div className="order-1 flex shrink-0 items-center gap-2">
+              <NavLink to="/" className="flex shrink-0 items-center" onClick={() => setMenuOpen(false)}>
+                <img src={kasmanPng} alt="" className="size-8 object-contain" />
+              </NavLink>
+              <span className="font-arcade hidden translate-y-0.5 text-base leading-none text-yellow-300 sm:inline">KASMAN</span>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((o) => !o)}
+                aria-expanded={menuOpen}
+                aria-controls="main-nav-menu"
+                className="font-arcade text-lg leading-none text-kas sm:hidden"
+              >
+                KASMAN MENU
+              </button>
+            </div>
             <div className="order-2 ml-auto sm:order-3 sm:ml-0">
               <WalletButton />
             </div>
-            <ul className="order-3 mt-2 grid w-full grid-cols-3 gap-2 text-sm sm:order-2 sm:ml-auto sm:mt-0 sm:flex sm:w-auto sm:gap-4">
+            <ul
+              id="main-nav-menu"
+              className={`${menuOpen ? "grid" : "hidden"} order-3 mt-2 w-full grid-cols-3 gap-2 text-sm sm:order-2 sm:ml-auto sm:mt-0 sm:flex sm:w-auto sm:gap-4`}
+            >
               {NAV.map((n) => (
                 <li key={n.to}>
                   <NavLink
                     to={n.to}
                     end
+                    onClick={() => setMenuOpen(false)}
                     className={({ isActive }) =>
                       `relative flex items-center justify-center rounded-lg border border-white/15 bg-white/[0.04] px-2 py-2 text-center leading-tight sm:border-0 sm:bg-transparent sm:px-2 sm:py-1 sm:text-sm ${isActive ? "text-kas sm:text-kas" : "text-white/70 hover:text-white"}`
                     }
