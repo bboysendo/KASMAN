@@ -20,6 +20,10 @@ export default function LeaderboardPage() {
         This month's top players, open to everyone. Total points add up every game submitted; time is the fastest clear of all {MAZE_COUNT} levels.
       </p>
 
+      <div className="mt-6 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+        <Leaderboard entries={entries} />
+      </div>
+
       <section className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="flex min-w-0 flex-col gap-4">
           <PrizePool pool={pool} />
@@ -39,10 +43,6 @@ export default function LeaderboardPage() {
           PLAY NOW ({ENTRY_FEE_KAS} KAS)
         </Link>
       </section>
-
-      <div className="mt-6 min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        <Leaderboard entries={entries} />
-      </div>
     </div>
   );
 }
