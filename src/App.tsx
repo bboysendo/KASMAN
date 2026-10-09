@@ -27,7 +27,7 @@ const NAV: { to: string; label: string; badge?: string }[] = [
   { to: "/shop", label: "Shop" },
   { to: "/quests", label: "Quests" },
   { to: "/staking", label: "Staking" },
-  { to: "/tokenomics", label: "Tokenomics" },
+  { to: "/tokenomics?tab=whitepaper", label: "Whitepaper" },
 ];
 
 export default function App() {
